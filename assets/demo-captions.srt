@@ -1,0 +1,29 @@
+1
+00:00:00,000 --> 00:00:07,000
+DataFlow Studio
+Excel & CSV Automation with Python
+
+2
+00:00:07,000 --> 00:00:17,000
+Inspect original records
+Duplicates, missing values and inconsistent text
+
+3
+00:00:17,000 --> 00:00:30,000
+Choose an explicit, reusable workflow
+Clean text, fill gaps and remove duplicates
+
+4
+00:00:30,000 --> 00:00:42,000
+153 original rows → 132 processed rows
+18 duplicates removed · 39 missing values → 0
+
+5
+00:00:42,000 --> 00:00:52,000
+Export safely and process files in a batch
+2 files completed successfully
+
+6
+00:00:52,000 --> 00:01:00,000
+Desktop GUI + CLI · Repeatable JSON workflows
+AI-assisted portfolio demo · Synthetic data

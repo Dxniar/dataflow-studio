@@ -390,11 +390,11 @@ def comparison(app, parent):
             ("Files processed", summary["files_processed"], t.TEXT),
         ],
     )
-    metrics.grid(row=0, column=0, sticky="ew", pady=(0, 16))
+    metrics.grid(row=0, column=0, sticky="ew", pady=(0, 10))
     done = ctk.CTkFrame(body, fg_color="#13382E", corner_radius=10)
-    done.grid(row=1, column=0, sticky="ew", pady=(0, 16))
+    done.grid(row=1, column=0, sticky="ew", pady=(0, 10))
     label(done, "✓  Completed successfully", color=t.PRIMARY, bold=True).pack(
-        side="left", padx=18, pady=13
+        side="left", padx=18, pady=7
     )
     label(
         done,
@@ -412,18 +412,15 @@ def comparison(app, parent):
         preview = DataPreview(previews, title, height=285)
         preview.grid(row=0, column=index, sticky="nsew", padx=(0, 8) if index == 0 else (8, 0))
         preview.show(frame)
-    detail = card(body)
-    detail.grid(row=3, column=0, sticky="ew", pady=(0, 14))
-    label(detail, "APPLIED OPERATIONS", size=10, color=t.MUTED, bold=True).pack(
-        anchor="w", padx=18, pady=(13, 4)
-    )
     label(
-        detail,
-        "  ·  ".join(result.operations) or "No transformations — original values preserved",
-        size=12,
+        body,
+        "Applied: " + ("  ·  ".join(result.operations) or "No transformations"),
+        size=11,
+        color=t.MUTED,
         wraplength=970,
         justify="left",
-    ).pack(anchor="w", padx=18, pady=(0, 13))
+        anchor="w",
+    ).grid(row=3, column=0, sticky="ew", pady=(0, 8))
     actions = ctk.CTkFrame(body, fg_color="transparent")
     actions.grid(row=4, column=0, sticky="ew", pady=(0, 5))
     app.action(actions, "Export Result  ↗", app.export_result, primary=True, width=170).pack(

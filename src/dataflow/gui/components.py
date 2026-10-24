@@ -50,13 +50,13 @@ def card(parent, **kwargs):
 class MetricCard(ctk.CTkFrame):
     def __init__(self, parent, title, value="—", accent=t.TEXT):
         super().__init__(parent, fg_color=t.SURFACE, corner_radius=12)
-        label(self, title.upper(), size=11, color=t.MUTED).pack(
+        label(self, title.upper(), size=11, color=t.MUTED, height=18).pack(
             anchor="w",
             padx=18,
-            pady=(14, 0),
+            pady=(10, 0),
         )
-        self.value = label(self, value, size=29, bold=True, color=accent)
-        self.value.pack(anchor="w", padx=18, pady=(2, 14))
+        self.value = label(self, value, size=27, bold=True, color=accent, height=35)
+        self.value.pack(anchor="w", padx=18, pady=(0, 10))
 
     def set(self, value):
         self.value.configure(text=str(value))

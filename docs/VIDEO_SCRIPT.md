@@ -24,3 +24,9 @@ The row-count caption is valid only for the checked-in fixture and full demo con
 7. Play the entire MP4 and confirm that paths and captions reveal no private material.
 
 An edited walkthrough made from captured application screens is a screen-based demo, not an uninterrupted screen recording. Label it accordingly in the accompanying portfolio description.
+
+## Delivered recording
+
+The delivered `dataflow-studio-demo.mp4` is a captioned recording of the real running window at 1920×1080 and 15 fps, approximately 60 seconds. The demonstration driver loads synthetic files and calls the application's normal GUI actions on its Tk thread; the actual core engine produces every result. The recording was trimmed and captioned with FFmpeg. The editable caption source is `assets/demo-captions.srt`.
+
+`python scripts/showcase.py` opens the same synthetic workspace for manual recording. `scripts/finish_demo_video.py` adds the captions to an existing window recording and extracts the five screenshots; install the optional `demo` extra to use it.

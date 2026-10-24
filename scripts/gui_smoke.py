@@ -70,6 +70,9 @@ def main():
         assert not app.run_processing(), "A duplicate run was accepted while busy"
         wait_for(app)
         assert len(app.result.processed) == 132 and app.result.duplicates_removed == 18
+        assert all(item.table.winfo_height() >= 100 for item in previews(app.page)), (
+            "Comparison tables are clipped"
+        )
         report["summary"] = app.result.summary()
         report["checks"].append("Shared workflow and before/after metrics")
         with TemporaryDirectory(prefix="dataflow-gui-") as temp:

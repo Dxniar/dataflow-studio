@@ -14,3 +14,4 @@ examples/output/
 .env.*
 .coverage
 htmlcov/
+DataFlowStudio.spec
