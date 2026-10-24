@@ -39,7 +39,7 @@ The local verification files under `artifacts/` contain detailed JSON evidence a
 
 ## Remote CI
 
-[GitHub Actions](https://github.com/Dxniar/dataflow-studio/actions/workflows/ci.yml) is the live source for remote status. The workflow covers Windows/Linux, Python 3.11–3.13, lint, formatting, tests, reproducible demo, package builds and a Windows portable build. This record of local checks does not itself assert that a remote run passed.
+[Run 40139251864](https://github.com/Dxniar/dataflow-studio/actions/runs/40139251864) completed successfully for code commit `0a90edcb555eced6076f7c07a2d46314da5f8967`. All seven jobs passed: six Windows/Linux and Python 3.11–3.13 test jobs, plus the Windows portable build. The jobs ran lint, formatting, tests, the reproducible demo and package builds. Later demo-driver, documentation and screenshot updates do not change the tested processing code. [GitHub Actions](https://github.com/Dxniar/dataflow-studio/actions/workflows/ci.yml) remains the live source for future remote status.
 
 ## Practical limits
 

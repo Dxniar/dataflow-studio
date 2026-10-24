@@ -25,23 +25,23 @@
 - Background error handling must always re-enable GUI actions.
 
 ## Task 1: Core engine
-- [ ] Write failing tests for configuration, transformations, file safety, Unicode and batch failures.
-- [ ] Implement `src/dataflow/core` using API contract.
-- [ ] Run core tests and report evidence.
+- [x] Write failing tests for configuration, transformations, file safety, Unicode and batch failures.
+- [x] Implement `src/dataflow/core` using API contract.
+- [x] Run core tests and report evidence.
 
 ## Task 2: CLI adapter
-- [ ] Write failing CLI tests using Typer runner, including equality with core.
-- [ ] Implement clean, process, convert, merge, batch, inspect and GUI launcher.
-- [ ] Run CLI tests and command help.
+- [x] Write failing CLI tests using Typer runner, including equality with core.
+- [x] Implement clean, process, convert, merge, batch, inspect and GUI launcher.
+- [x] Run CLI tests and command help.
 
 ## Task 3: GUI adapter
-- [ ] Write controller tests for core parity and error handling.
-- [ ] Build pages/components/theme and worker queue; all primary controls functional.
-- [ ] Verify controller tests and launch real application.
+- [x] Write controller tests for core parity and error handling.
+- [x] Build pages/components/theme and worker queue; all primary controls functional.
+- [x] Verify controller tests and launch real application.
 
 ## Task 4: Reproducibility and distribution
-- [ ] Add pyproject, CI, deterministic examples and demo workflow.
-- [ ] Create README, architecture, limitations, usage and portfolio/video copy.
-- [ ] Run full pytest/Ruff, demo commands and independent review; resolve findings.
-- [ ] Capture real GUI screens, record demo if possible, build and smoke-test EXE.
-- [ ] Audit publication contents, commit, publish if available, verify remote CI; create source ZIP.
+- [x] Add pyproject, CI, deterministic examples and demo workflow.
+- [x] Create README, architecture, limitations, usage and portfolio/video copy.
+- [x] Run full pytest/Ruff, demo commands and independent review; resolve findings.
+- [x] Capture real GUI screens, record demo if possible, build and smoke-test EXE.
+- [x] Audit publication contents, commit, publish if available, verify remote CI; create source ZIP.

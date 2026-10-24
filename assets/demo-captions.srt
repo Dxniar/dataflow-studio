@@ -19,11 +19,14 @@ Clean text, fill gaps and remove duplicates
 18 duplicates removed · 39 missing values → 0
 
 5
-00:00:42,000 --> 00:00:52,000
+00:00:42,000 --> 00:00:46,000
 Export safely and process files in a batch
-2 files completed successfully
 
 6
+00:00:46,000 --> 00:00:52,000
+2 files completed successfully
+
+7
 00:00:52,000 --> 00:01:00,000
 Desktop GUI + CLI · Repeatable JSON workflows
 AI-assisted portfolio demo · Synthetic data
