@@ -19,7 +19,8 @@ def main():
     )
     args = parser.parse_args()
     app = DataFlowApp()
-    app.state("zoomed")
+    # Maximize after Tk's initial map/scaling callbacks have completed.
+    app.after(1500, lambda: app.state("zoomed"))
     app.output_dir_var.set(str(ROOT / "examples" / "output"))
     app.after(
         300,

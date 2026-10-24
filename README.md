@@ -31,6 +31,8 @@ Small-business spreadsheets often arrive with repeated records, missing values, 
 
 ## Installation
 
+For Windows, download and extract the [portable app](https://github.com/Dxniar/dataflow-studio/releases/download/v1.0.0/DataFlowStudio-Windows.zip), then open `DataFlowStudio.exe`. Keep the full extracted folder together. The [release](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.0.0) also includes the source ZIP and [60-second video](https://github.com/Dxniar/dataflow-studio/releases/download/v1.0.0/dataflow-studio-demo.mp4).
+
 Python 3.11 or newer with Tk support is required. Python 3.12 is recommended for the Windows build. From the repository root:
 
 ```powershell

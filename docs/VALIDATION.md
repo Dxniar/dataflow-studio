@@ -6,7 +6,7 @@ Date: 25 October 2026. Environment: Windows 11 x64, Python 3.12.0.
 
 | Check | Observed result |
 | --- | --- |
-| `python -m pytest -q` | 102 passed |
+| `python -m pytest -q` | 103 passed, including forced-color CLI rendering |
 | `python -m ruff check .` | All checks passed |
 | `python -m ruff format --check .` | All checked files formatted |
 | `python scripts/run_demo.py` | Passed assertions for cleanup, conversion, merging, batch and unchanged processing inputs |

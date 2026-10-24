@@ -5,6 +5,7 @@ import json
 
 import pandas as pd
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -254,10 +255,17 @@ def test_invalid_fill_option_is_usage_error(cli_app, source):
     assert "COLUMN=VALUE" in result.output
 
 
-def test_deduplicate_by_requires_explicit_drop_duplicates(cli_app, source):
+@pytest.mark.parametrize("force_color", [False, True])
+def test_deduplicate_by_requires_explicit_drop_duplicates(
+    cli_app, source, monkeypatch, force_color
+):
+    if force_color:
+        monkeypatch.setenv("FORCE_COLOR", "1")
+        monkeypatch.setenv("TERM", "xterm-256color")
+        monkeypatch.setenv("COLUMNS", "80")
     result = runner.invoke(cli_app, ["clean", str(source), "--deduplicate-by", "id"])
     assert result.exit_code == 2
-    assert "--drop-duplicates" in result.output
+    assert "--drop-duplicates" in Text.from_ansi(result.output).plain
 
 
 def test_inspect_counts_whitespace_cells_consistently_with_core(cli_app, tmp_path):
