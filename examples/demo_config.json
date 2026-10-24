@@ -1,0 +1,13 @@
+{
+  "trim_whitespace": true,
+  "drop_empty_rows": true,
+  "drop_duplicates": true,
+  "deduplicate_by": ["customer_id"],
+  "fill_missing": {"email": "Not provided", "amount": 0},
+  "standardize_values": {
+    "city": {"almaty": "Almaty", "ALMATY": "Almaty", "astana": "Astana"}
+  },
+  "convert_types": {"amount": "float"},
+  "rename_columns": {"full_name": "customer_name"},
+  "sort_by": ["customer_id"]
+}

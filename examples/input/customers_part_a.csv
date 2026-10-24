@@ -1,0 +1,67 @@
+﻿customer_id,full_name,email,city,amount,created_at
+C0001,  Демо Клиент 001  ,customer001@example.test, Almaty ,62.0,2026-09-01
+C0002,  Демо Тұтынушы 002  ,customer002@example.test,almaty,99.0,2026-09-02
+C0003,  Demo Customer 003  ,customer003@example.test,ALMATY,136.0,2026-09-03
+C0004,  Демо Клиент 004  ,customer004@example.test,Astana,173.0,2026-09-04
+C0005,  Демо Тұтынушы 005  ,customer005@example.test, astana ,210.0,2026-09-05
+C0006,  Demo Customer 006  ,customer006@example.test,Қызылорда,247.0,2026-09-06
+C0007,  Демо Клиент 007  ,customer007@example.test, Almaty ,284.0,2026-09-07
+C0008,  Демо Тұтынушы 008  ,customer008@example.test,almaty,321.0,2026-09-08
+C0009,  Demo Customer 009  ,customer009@example.test,ALMATY,358.0,2026-09-09
+C0010,  Демо Клиент 010  ,customer010@example.test,Astana,395.0,2026-09-10
+C0011,  Демо Тұтынушы 011  ,, astana ,432.0,2026-09-11
+C0012,  Demo Customer 012  ,customer012@example.test,Қызылорда,469.0,2026-09-12
+C0013,  Демо Клиент 013  ,customer013@example.test, Almaty ,506.0,2026-09-13
+C0014,  Демо Тұтынушы 014  ,customer014@example.test,almaty,543.0,2026-09-14
+C0015,  Demo Customer 015  ,customer015@example.test,ALMATY,580.0,2026-09-15
+C0016,  Демо Клиент 016  ,customer016@example.test,Astana,617.0,2026-09-16
+C0017,  Демо Тұтынушы 017  ,customer017@example.test, astana ,,2026-09-17
+C0018,  Demo Customer 018  ,customer018@example.test,Қызылорда,691.0,2026-09-18
+C0019,  Демо Клиент 019  ,customer019@example.test, Almaty ,728.0,2026-09-19
+C0020,  Демо Тұтынушы 020  ,customer020@example.test,almaty,765.0,2026-09-20
+C0021,  Demo Customer 021  ,customer021@example.test,ALMATY,802.0,2026-09-21
+C0022,  Демо Клиент 022  ,,Astana,839.0,2026-09-22
+C0023,  Демо Тұтынушы 023  ,customer023@example.test, astana ,876.0,2026-09-23
+C0024,  Demo Customer 024  ,customer024@example.test,Қызылорда,913.0,2026-09-24
+C0025,  Демо Клиент 025  ,customer025@example.test, Almaty ,950.0,2026-09-25
+C0026,  Демо Тұтынушы 026  ,customer026@example.test,almaty,987.0,2026-09-26
+C0027,  Demo Customer 027  ,customer027@example.test,ALMATY,49.0,2026-09-27
+C0028,  Демо Клиент 028  ,customer028@example.test,Astana,86.0,2026-09-28
+C0029,  Демо Тұтынушы 029  ,customer029@example.test, astana ,123.0,2026-09-01
+C0030,  Demo Customer 030  ,customer030@example.test,Қызылорда,160.0,2026-09-02
+C0031,  Демо Клиент 031  ,customer031@example.test, Almaty ,197.0,2026-09-03
+C0032,  Демо Тұтынушы 032  ,customer032@example.test,almaty,234.0,2026-09-04
+C0033,  Demo Customer 033  ,,ALMATY,271.0,2026-09-05
+C0034,  Демо Клиент 034  ,customer034@example.test,Astana,,2026-09-06
+C0035,  Демо Тұтынушы 035  ,customer035@example.test, astana ,345.0,2026-09-07
+C0036,  Demo Customer 036  ,customer036@example.test,Қызылорда,382.0,2026-09-08
+C0037,  Демо Клиент 037  ,customer037@example.test, Almaty ,419.0,2026-09-09
+C0038,  Демо Тұтынушы 038  ,customer038@example.test,almaty,456.0,2026-09-10
+C0039,  Demo Customer 039  ,customer039@example.test,ALMATY,493.0,2026-09-11
+C0040,  Демо Клиент 040  ,customer040@example.test,Astana,530.0,2026-09-12
+C0041,  Демо Тұтынушы 041  ,customer041@example.test, astana ,567.0,2026-09-13
+C0042,  Demo Customer 042  ,customer042@example.test,Қызылорда,604.0,2026-09-14
+C0043,  Демо Клиент 043  ,customer043@example.test, Almaty ,641.0,2026-09-15
+C0044,  Демо Тұтынушы 044  ,,almaty,678.0,2026-09-16
+C0045,  Demo Customer 045  ,customer045@example.test,ALMATY,715.0,2026-09-17
+C0046,  Демо Клиент 046  ,customer046@example.test,Astana,752.0,2026-09-18
+C0047,  Демо Тұтынушы 047  ,customer047@example.test, astana ,789.0,2026-09-19
+C0048,  Demo Customer 048  ,customer048@example.test,Қызылорда,826.0,2026-09-20
+C0049,  Демо Клиент 049  ,customer049@example.test, Almaty ,863.0,2026-09-21
+C0050,  Демо Тұтынушы 050  ,customer050@example.test,almaty,900.0,2026-09-22
+C0051,  Demo Customer 051  ,customer051@example.test,ALMATY,,2026-09-23
+C0052,  Демо Клиент 052  ,customer052@example.test,Astana,974.0,2026-09-24
+C0053,  Демо Тұтынушы 053  ,customer053@example.test, astana ,36.0,2026-09-25
+C0054,  Demo Customer 054  ,customer054@example.test,Қызылорда,73.0,2026-09-26
+C0055,  Демо Клиент 055  ,, Almaty ,110.0,2026-09-27
+C0056,  Демо Тұтынушы 056  ,customer056@example.test,almaty,147.0,2026-09-28
+C0057,  Demo Customer 057  ,customer057@example.test,ALMATY,184.0,2026-09-01
+C0058,  Демо Клиент 058  ,customer058@example.test,Astana,221.0,2026-09-02
+C0059,  Демо Тұтынушы 059  ,customer059@example.test, astana ,258.0,2026-09-03
+C0060,  Demo Customer 060  ,customer060@example.test,Қызылорда,295.0,2026-09-04
+C0061,  Демо Клиент 061  ,customer061@example.test, Almaty ,332.0,2026-09-05
+C0062,  Демо Тұтынушы 062  ,customer062@example.test,almaty,369.0,2026-09-06
+C0063,  Demo Customer 063  ,customer063@example.test,ALMATY,406.0,2026-09-07
+C0064,  Демо Клиент 064  ,customer064@example.test,Astana,443.0,2026-09-08
+C0065,  Демо Тұтынушы 065  ,customer065@example.test, astana ,480.0,2026-09-09
+C0066,  Demo Customer 066  ,,Қызылорда,517.0,2026-09-10

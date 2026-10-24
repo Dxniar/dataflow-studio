@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataflow-studio"
+version = "1.0.0"
+description = "Desktop and CLI tools for safe, repeatable Excel and CSV workflows."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Dxniar"}]
+dependencies = [
+  "pandas>=2.2,<3.0",
+  "openpyxl>=3.1,<4",
+  "customtkinter>=5.2,<6",
+  "typer>=0.15,<1",
+  "pillow>=10,<13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.9,<1", "build>=1.2,<2", "pyinstaller>=6.11,<7"]
+demo = ["imageio-ffmpeg>=0.6,<1"]
+
+[project.scripts]
+dataflow = "dataflow.cli:app"
+
+[project.gui-scripts]
+dataflow-gui = "dataflow.gui.app:main"
+
+[project.urls]
+Repository = "https://github.com/Dxniar/dataflow-studio"
+Issues = "https://github.com/Dxniar/dataflow-studio/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+

@@ -1,0 +1,8 @@
+{
+  "trim_whitespace": true,
+  "drop_empty_rows": true,
+  "convert_types": {"amount": "float"},
+  "filters": [{"column": "amount", "operator": "greater_than", "value": 500}],
+  "sort_by": ["amount"],
+  "sort_ascending": false
+}
