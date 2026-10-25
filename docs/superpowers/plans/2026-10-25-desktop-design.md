@@ -13,7 +13,7 @@ An understated data workspace: graphite/navy surfaces, restrained green actions,
 Existing public app methods and all processing behavior stay compatible. `WorkflowCard(parent, *, on_reset=None, height=120)` provides `render(config_dict)`. Pages assign it to `app.workflow_preview`; root updates `refresh_workflow_preview()` to call `render`. Keep all existing component function names; new metric cards use one shared subtle surface rather than large tiles. `DataPreview.show(frame)` remains compatible.
 
 ## Tasks
-- [ ] Compact shell, design tokens, line icons, table and workflow components.
-- [ ] Dashboard, cleaning, transformation, comparison, utility/history/settings layouts.
-- [ ] Real native screenshots, full existing tests and GUI smoke, fix layout regressions.
-- [ ] Update deliverables to match the verified design.
+- [x] Compact shell, design tokens, line icons, table and workflow components.
+- [x] Dashboard, cleaning, transformation, comparison, utility/history/settings layouts.
+- [x] Real native screenshots, full existing tests and GUI smoke, fix layout regressions.
+- [x] Update deliverables to match the verified design.

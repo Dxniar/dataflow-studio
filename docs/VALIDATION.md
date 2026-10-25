@@ -41,7 +41,7 @@ The local verification files under `artifacts/` contain detailed JSON evidence a
 
 ## Remote CI
 
-The 1.1.0 workflow run is being verified during release preparation. Its final run link is recorded before release handoff.
+The 1.1.0 [run 40178137674](https://github.com/Dxniar/dataflow-studio/actions/runs/40178137674) completed successfully for commit `47ab04085bcf161495f8cac703ace76fd8c07d8c`: all seven jobs passed, including all six OS/Python test combinations and the Windows build. Final screenshot and documentation updates preserve that tested runtime code.
 
 Historical 1.0 validation: [run 40139251864](https://github.com/Dxniar/dataflow-studio/actions/runs/40139251864) passed all seven jobs for commit `0a90edcb555eced6076f7c07a2d46314da5f8967`. [GitHub Actions](https://github.com/Dxniar/dataflow-studio/actions/workflows/ci.yml) remains the live source for remote status.
 
