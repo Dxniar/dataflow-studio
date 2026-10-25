@@ -1,7 +1,9 @@
 """Exercise the real Tk window; run manually on a desktop, never in headless CI."""
 
+import gc
 import hashlib
 import json
+import sys
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -33,6 +35,9 @@ def main():
     hashes = [hashlib.sha256(path.read_bytes()).hexdigest() for path in paths]
     app = DataFlowApp()
     callback_errors = []
+    finalizer_errors = []
+    original_unraisable_hook = sys.unraisablehook
+    sys.unraisablehook = lambda error: finalizer_errors.append(str(error.exc_value))
     app.report_callback_exception = lambda kind, value, trace: callback_errors.append(str(value))
     report = {"desktop": True, "pages": [], "checks": []}
     try:
@@ -41,6 +46,9 @@ def main():
             app.show_page(page)
             app.update()
             report["pages"].append(page)
+        app._submit("Widget lifecycle check", gc.collect, lambda value: None)
+        wait_for(app)
+        assert not finalizer_errors, finalizer_errors
         assert app.load_paths(paths)
         wait_for(app)
         assert len(app.files) == 2 and len(app.current_frame) == 153
@@ -54,7 +62,7 @@ def main():
             return found
 
         tables = previews(app.page)
-        assert tables and tables[0].table.winfo_height() >= 100, "Dashboard preview is clipped"
+        assert tables and tables[0].table.winfo_height() >= 150, "Dashboard preview is clipped"
         report["checks"].append("CSV and XLSX import and preview")
         app.select_file(1)
         app._select_sheet("About")
@@ -70,7 +78,8 @@ def main():
         assert not app.run_processing(), "A duplicate run was accepted while busy"
         wait_for(app)
         assert len(app.result.processed) == 132 and app.result.duplicates_removed == 18
-        assert all(item.table.winfo_height() >= 100 for item in previews(app.page)), (
+        # At the smallest default window, keep at least three complete data rows.
+        assert all(item.table.winfo_height() >= 140 for item in previews(app.page)), (
             "Comparison tables are clipped"
         )
         report["summary"] = app.result.summary()
@@ -109,6 +118,7 @@ def main():
         report["passed"] = True
     finally:
         app.destroy()
+        sys.unraisablehook = original_unraisable_hook
     output = ROOT / "artifacts"
     output.mkdir(exist_ok=True)
     (output / "gui-smoke.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

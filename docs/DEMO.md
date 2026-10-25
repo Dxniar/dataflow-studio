@@ -12,10 +12,10 @@ The first command recreates synthetic inputs. The second verifies cleaning, two 
 
 ## GUI walkthrough
 
-1. On Dashboard, upload `examples/input/customers_dirty.csv`.
+1. On Dashboard, click **Add files** and choose `examples/input/customers_dirty.csv`.
 2. Inspect the input table. Notice repeated customer IDs, blanks and padding around names and cities.
 3. In Data Cleaning enable Trim Whitespace, Remove Empty Rows and Remove Duplicates. Select `customer_id` as the duplicate key.
-4. Alternatively load `examples/demo_config.json` to apply the full demonstrated pipeline, including missing-value fills, exact city mappings, numeric conversion, rename and sorting.
+4. Alternatively use **Load** to open `examples/demo_config.json` and apply the full demonstrated pipeline, including missing-value fills, exact city mappings, numeric conversion, rename and sorting. The readable workflow panel lists the steps; **View JSON** opens the exact configuration.
 5. Run processing. The Before / After screen shows counts computed from this run.
 6. Export to a new `.xlsx` file. The original input stays unchanged.
 7. Upload `customers_dirty.xlsx`, choose `Customers`, and run the same pipeline in batch to a fresh output directory.

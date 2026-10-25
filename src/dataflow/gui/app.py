@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from dataflow.core.processor import batch_process, merge_files
 from dataflow.gui import theme as t
 from dataflow.gui.components import button, label, option
 from dataflow.gui.controller import TaskRunner, run_pipeline, save_workflow, workflow_text
+from dataflow.gui.icons import icon
 from dataflow.gui.pages import build_page
 from dataflow.utils.logging_config import configure_gui_logging
 
@@ -118,61 +120,128 @@ class DataFlowApp(ctk.CTk):
     def _build_shell(self):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
-        sidebar = ctk.CTkFrame(self, fg_color=t.SIDEBAR, width=215, corner_radius=0)
+        sidebar = ctk.CTkFrame(self, fg_color=t.SIDEBAR, width=202, corner_radius=0, border_width=0)
         sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
         sidebar.grid_propagate(False)
-        label(sidebar, "▤", size=34, color=t.PRIMARY, bold=True).pack(
-            anchor="w", padx=24, pady=(24, 0)
+        brand = ctk.CTkFrame(sidebar, fg_color="transparent")
+        brand.pack(fill="x", padx=18, pady=(23, 28))
+        mark = ctk.CTkLabel(
+            brand,
+            text="",
+            image=icon("brand", t.PRIMARY, 27),
+            width=37,
+            height=37,
+            corner_radius=8,
+            fg_color=t.PRIMARY_SOFT,
         )
-        label(sidebar, "DataFlow", size=25, bold=True).pack(anchor="w", padx=24)
-        label(sidebar, "STUDIO", size=12, color=t.MUTED).pack(anchor="w", padx=25, pady=(0, 30))
-        label(sidebar, "WORKSPACE", size=10, color=t.MUTED, bold=True).pack(
-            anchor="w", padx=24, pady=(0, 8)
-        )
+        mark.pack(side="left", padx=(0, 10))
+        brand_text = ctk.CTkFrame(brand, fg_color="transparent")
+        brand_text.pack(side="left")
+        label(brand_text, "DataFlow", size=19, bold=True, height=24).pack(anchor="w")
+        label(brand_text, "STUDIO", size=9, color=t.MUTED, height=15).pack(anchor="w")
         self.nav_buttons = {}
-        symbols = ["◉", "◇", "⇄", "⊞", "⇧", "▥", "≡", "⚙"]
-        for name, symbol in zip(self.PAGE_NAMES, symbols, strict=True):
-            nav = ctk.CTkButton(
-                sidebar,
-                text=f"{symbol}   {name}",
-                anchor="w",
-                height=43,
-                width=187,
-                corner_radius=8,
-                fg_color="transparent",
-                hover_color=t.SURFACE,
-                text_color=t.MUTED,
-                font=(t.FONT, 13),
-                command=lambda value=name: self.show_page(value),
+        self.nav_icons = {
+            "Dashboard": "table",
+            "Data Cleaning": "clean",
+            "Transform Data": "transform",
+            "Merge Files": "merge",
+            "Convert Files": "convert",
+            "Before / After": "compare",
+            "History & Logs": "history",
+            "Settings": "settings",
+        }
+        groups = [
+            ("WORKSPACE", ["Dashboard", "Before / After", "History & Logs"]),
+            ("DATA TOOLS", ["Data Cleaning", "Transform Data", "Merge Files", "Convert Files"]),
+        ]
+        for title, names in groups:
+            label(sidebar, title, size=9, color=t.SUBTLE, bold=True, height=18).pack(
+                anchor="w", padx=23, pady=(4, 8)
             )
-            nav.pack(padx=14, pady=3)
-            self.nav_buttons[name] = nav
+            for name in names:
+                nav = ctk.CTkButton(
+                    sidebar,
+                    text=name,
+                    anchor="w",
+                    image=icon(self.nav_icons[name], t.MUTED),
+                    compound="left",
+                    height=36,
+                    width=178,
+                    corner_radius=6,
+                    border_spacing=12,
+                    fg_color="transparent",
+                    hover_color=t.SURFACE_HOVER,
+                    text_color=t.MUTED,
+                    font=(t.FONT, 12),
+                    command=lambda value=name: self.show_page(value),
+                )
+                nav.pack(padx=12, pady=2)
+                self.nav_buttons[name] = nav
+            ctk.CTkFrame(sidebar, fg_color="transparent", height=14).pack()
         footer = ctk.CTkFrame(sidebar, fg_color="transparent")
-        footer.pack(side="bottom", fill="x", padx=24, pady=24)
-        label(footer, "●  LOCAL WORKSPACE", size=10, color=t.PRIMARY).pack(anchor="w")
-        label(footer, "Python · pandas · openpyxl", size=10, color=t.MUTED).pack(
-            anchor="w", pady=(7, 0)
+        footer.pack(side="bottom", fill="x", padx=12, pady=16)
+        nav = ctk.CTkButton(
+            footer,
+            text="Settings",
+            anchor="w",
+            image=icon("settings", t.MUTED),
+            compound="left",
+            height=35,
+            width=178,
+            corner_radius=6,
+            border_spacing=12,
+            fg_color="transparent",
+            hover_color=t.SURFACE_HOVER,
+            text_color=t.MUTED,
+            font=(t.FONT, 12),
+            command=lambda: self.show_page("Settings"),
+        )
+        nav.pack(fill="x", pady=(0, 16))
+        self.nav_buttons["Settings"] = nav
+        ctk.CTkFrame(footer, height=1, fg_color=t.BORDER).pack(fill="x", padx=8, pady=(0, 12))
+        label(footer, "●  On-device workspace", size=10, color=t.MUTED, height=20).pack(
+            anchor="w", padx=10
+        )
+        label(footer, "Files stay on your computer", size=9, color=t.SUBTLE, height=18).pack(
+            anchor="w", padx=10
         )
         self.content = ctk.CTkFrame(self, fg_color=t.BG, corner_radius=0)
-        self.content.grid(row=0, column=1, sticky="nsew", padx=28, pady=(22, 0))
+        self.content.grid(row=0, column=1, sticky="nsew", padx=24, pady=(18, 0))
         self.content.grid_columnconfigure(0, weight=1)
         self.content.grid_rowconfigure(2, weight=1)
         top = ctk.CTkFrame(self.content, fg_color="transparent")
-        top.grid(row=0, column=0, sticky="ew", pady=(0, 16))
-        self.page_title = label(top, "", size=28, bold=True)
-        self.page_title.pack(side="left")
-        upload = button(top, "+  Upload Files", self.choose_files, primary=True, width=150)
+        top.grid(row=0, column=0, sticky="ew", pady=(0, 18))
+        heading = ctk.CTkFrame(top, fg_color="transparent")
+        heading.pack(side="left")
+        self.page_title = label(heading, "", size=25, bold=True, height=34)
+        self.page_title.pack(anchor="w")
+        self.page_hint = label(heading, "", size=11, color=t.MUTED, height=20)
+        self.page_hint.pack(anchor="w", pady=(2, 0))
+        upload = button(
+            top,
+            "Add files",
+            self.choose_files,
+            primary=True,
+            width=130,
+            image=icon("upload", t.BG, 16),
+            compound="left",
+        )
         upload.pack(side="right")
         self.upload_button = upload
-        self.file_bar = ctk.CTkFrame(self.content, fg_color=t.SIDEBAR, corner_radius=10)
+        self.file_bar = ctk.CTkFrame(
+            self.content, fg_color=t.PANEL, corner_radius=7, border_width=1, border_color=t.BORDER
+        )
         self.file_bar.grid(row=1, column=0, sticky="ew", pady=(0, 16))
-        label(self.file_bar, "ACTIVE FILE", size=10, color=t.MUTED, bold=True).pack(
-            side="left", padx=(15, 12), pady=13
+        label(self.file_bar, "", image=icon("file", t.MUTED, 17), width=20).pack(
+            side="left", padx=(14, 7), pady=8
         )
         self.file_menu = option(
-            self.file_bar, ["No file selected"], command=self._select_label, width=300
+            self.file_bar, ["No file selected"], command=self._select_label, width=255
         )
-        self.file_menu.pack(side="left", padx=4, pady=9)
+        self.file_menu.pack(side="left", padx=0, pady=6)
+        ctk.CTkFrame(self.file_bar, fg_color=t.BORDER, width=1, height=22).pack(
+            side="left", padx=12
+        )
         self.sheet_menu = option(
             self.file_bar, ["CSV / first sheet"], command=self._select_sheet, width=150
         )
@@ -184,13 +253,18 @@ class DataFlowApp(ctk.CTk):
         self.page.grid_columnconfigure(0, weight=1)
         self.page.grid_rowconfigure(0, weight=1)
         status = ctk.CTkFrame(self, fg_color=t.BG, height=45, corner_radius=0)
-        status.grid(row=1, column=1, sticky="ew", padx=28, pady=10)
+        status.grid(row=1, column=1, sticky="ew", padx=24, pady=(7, 10))
         self.status_label = label(
             status, self._status_text, size=11, color=self._status_color, anchor="w"
         )
         self.status_label.pack(side="left", fill="x", expand=True)
         self.progress = ctk.CTkProgressBar(
-            status, mode="indeterminate", width=130, height=5, progress_color=t.PRIMARY
+            status,
+            mode="determinate",
+            width=105,
+            height=3,
+            progress_color=t.PRIMARY,
+            fg_color=t.BORDER,
         )
         self.progress.pack(side="right", padx=(12, 0))
         self.progress.set(0)
@@ -205,11 +279,31 @@ class DataFlowApp(ctk.CTk):
         self._actions = [self.upload_button]
         for widget in self.page.winfo_children():
             widget.destroy()
+        # Destroyed Tk controls can retain Python callback cycles. Reclaim their
+        # variables here on Tk's thread before a worker happens to trigger GC.
+        gc.collect()
         self.page_title.configure(text=name)
+        hints = {
+            "Dashboard": "Your files and data, in one workspace.",
+            "Data Cleaning": "Choose the changes your data needs.",
+            "Transform Data": "Shape columns and records with reusable rules.",
+            "Merge Files": "Bring compatible tables together.",
+            "Convert Files": "Move between CSV and Excel formats.",
+            "Before / After": "Review every change before exporting.",
+            "History & Logs": "Your session activity and exported files.",
+            "Settings": "Make this workspace your own.",
+        }
+        self.page_hint.configure(text=hints[name])
+        self.upload_button.configure(
+            fg_color=t.PRIMARY if name == "Dashboard" else t.SURFACE_HOVER,
+            text_color=t.BG if name == "Dashboard" else t.TEXT,
+            image=icon("upload", t.BG if name == "Dashboard" else t.MUTED, 16),
+        )
         for title, nav in self.nav_buttons.items():
             nav.configure(
-                fg_color="#163E36" if name == title else "transparent",
-                text_color=t.PRIMARY if name == title else t.MUTED,
+                fg_color=t.PRIMARY_SOFT if name == title else "transparent",
+                text_color=t.TEXT if name == title else t.MUTED,
+                image=icon(self.nav_icons[title], t.PRIMARY if name == title else t.MUTED),
             )
         build_page(self, self.page, name)
         self._set_busy(self.busy)
@@ -245,9 +339,11 @@ class DataFlowApp(ctk.CTk):
             else "normal"
         )
         if busy:
+            self.progress.configure(mode="indeterminate")
             self.progress.start()
         else:
             self.progress.stop()
+            self.progress.configure(mode="determinate")
             self.progress.set(0)
 
     def _submit(self, name, work, on_success):
@@ -403,8 +499,15 @@ class DataFlowApp(ctk.CTk):
         if preview is None or not preview.winfo_exists():
             return
         try:
-            content = workflow_text(self.collect_config())
+            config = self.collect_config()
+            if hasattr(preview, "render"):
+                preview.render(config)
+                return
+            content = workflow_text(config)
         except Exception as error:
+            if hasattr(preview, "show_error"):
+                preview.show_error(str(error))
+                return
             content = f"Configuration needs attention:\n{error}"
         preview.configure(state="normal")
         preview.delete("1.0", "end")
@@ -655,8 +758,8 @@ class DataFlowApp(ctk.CTk):
                 self.fail(error)
 
     def change_theme(self, value):
-        t.BG = "#0B1120" if value == "Midnight" else "#15171D"
-        t.SIDEBAR = "#111827" if value == "Midnight" else "#1D2029"
+        t.BG = "#0D1219" if value == "Midnight" else "#15171D"
+        t.SIDEBAR = "#10161F" if value == "Midnight" else "#1D2029"
         self.configure(fg_color=t.BG)
         for widget in self.winfo_children():
             widget.destroy()

@@ -4,13 +4,13 @@
 
 ## 1. Название проекта
 
-**DataFlow Studio — Excel & CSV Automation with Python.** Настольное приложение и CLI для повторяемой обработки таблиц. Лицензия — MIT.
+**DataFlow Studio 1.1 — Excel & CSV Automation with Python.** Настольное приложение и CLI для повторяемой обработки таблиц. Лицензия — MIT. В версии 1.1 переработан интерфейс: компактная навигация, единые иконки, больше места таблицам, тёмные полосы прокрутки и читаемая панель операций с отдельным просмотром JSON.
 
 ## 2. Репозиторий GitHub
 
 [Dxniar/dataflow-studio](https://github.com/Dxniar/dataflow-studio), опубликованная ветка `main`.
 
-Страница релиза: [v1.0.0](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.0.0). Вложения: [Windows ZIP](https://github.com/Dxniar/dataflow-studio/releases/download/v1.0.0/DataFlowStudio-Windows.zip), [исходники](https://github.com/Dxniar/dataflow-studio/releases/download/v1.0.0/dataflow-studio-source.zip), [MP4](https://github.com/Dxniar/dataflow-studio/releases/download/v1.0.0/dataflow-studio-demo.mp4) и контрольные суммы SHA-256.
+Страница релиза: [v1.1.0](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.1.0). Вложения: [Windows ZIP](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/DataFlowStudio-Windows.zip), [исходники](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/dataflow-studio-source.zip), [MP4](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/dataflow-studio-demo.mp4) и контрольные суммы SHA-256.
 
 ## 3. Архитектура и принятые решения
 
@@ -67,7 +67,7 @@ py -3.12 -m venv .venv
 
 ## 8. Статус GitHub Actions
 
-[Запуск 40139251864](https://github.com/Dxniar/dataflow-studio/actions/runs/40139251864) завершён со статусом **SUCCESS**: все **7 заданий** прошли. Матрица охватывает Windows/Linux и Python 3.11–3.13; отдельное задание собирает Windows-приложение. Проверенный commit: `0a90edcb555eced6076f7c07a2d46314da5f8967`.
+Матрица охватывает Windows/Linux и Python 3.11–3.13; отдельное задание собирает Windows-приложение. Результат нового запуска для версии 1.1 добавляется при финальной проверке релиза. Исторический [запуск 40139251864](https://github.com/Dxniar/dataflow-studio/actions/runs/40139251864) проверял версию 1.0 и завершился успешно во всех семи заданиях.
 
 ## 9. Статус Windows EXE
 
@@ -105,7 +105,7 @@ PyInstaller собрал `dist/DataFlowStudio/DataFlowStudio.exe`; настоя�
 
 Файл: `artifacts/dataflow-studio-demo.mp4`. Длительность — **59,93 секунды**, 1920×1080, H.264, 15 fps, английские титры, без аудио и водяного знака. Использована настоящая запись действий GUI и реальной обработки синтетических данных. Видео смонтировано и снабжено титрами; результаты не подменялись.
 
-Проверены пять разных кадров и полное декодирование файла без ошибок; сравнение показывает реальные строки и все столбцы с прокруткой. [Скачать видео](https://github.com/Dxniar/dataflow-studio/releases/download/v1.0.0/dataflow-studio-demo.mp4). Для повторной записи подготовлены [сценарий и инструкция OBS](VIDEO_SCRIPT.md).
+Проверены пять разных кадров и полное декодирование файла без ошибок; сравнение показывает реальные строки и все столбцы с прокруткой. [Скачать видео](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/dataflow-studio-demo.mp4). Для повторной записи подготовлены [сценарий и инструкция OBS](VIDEO_SCRIPT.md).
 
 ## 13. Известные ограничения
 
@@ -134,7 +134,7 @@ docs/                 Архитектура, API, демо, ограничен�
 .github/workflows/    CI и Windows-сборка
 ```
 
-Материалы передачи: `artifacts/DataFlowStudio-Windows.zip`, `artifacts/dataflow-studio-source.zip`, `artifacts/dataflow-studio-demo.mp4` и `artifacts/SHA256SUMS.txt`. Они также передаются через [релиз v1.0.0](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.0.0). Генерируемая папка `artifacts/` исключена из Git.
+Материалы передачи: `artifacts/DataFlowStudio-Windows.zip`, `artifacts/dataflow-studio-source.zip`, `artifacts/dataflow-studio-demo.mp4` и `artifacts/SHA256SUMS.txt`. Они также передаются через [релиз v1.1.0](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.1.0). Генерируемая папка `artifacts/` исключена из Git.
 
 ## 15. English Upwork portfolio description
 

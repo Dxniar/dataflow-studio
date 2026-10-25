@@ -10,6 +10,8 @@ Clean messy customer tables, compare the changes, and export a result you can in
 
 This is an **AI-assisted personal portfolio project**. Every included customer record is synthetic. It is not a paid client case study, and it makes no claims about commercial results.
 
+Version **1.1** introduces a quieter desktop workspace: more room for tables, grouped navigation, consistent line icons, dark scrollbars and a readable workflow summary with a separate JSON inspector.
+
 ![DataFlow Studio dashboard](assets/screenshots/01-dashboard.png)
 
 ## The problem it solves
@@ -31,7 +33,7 @@ Small-business spreadsheets often arrive with repeated records, missing values, 
 
 ## Installation
 
-For Windows, download and extract the [portable app](https://github.com/Dxniar/dataflow-studio/releases/download/v1.0.0/DataFlowStudio-Windows.zip), then open `DataFlowStudio.exe`. Keep the full extracted folder together. The [release](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.0.0) also includes the source ZIP and [60-second video](https://github.com/Dxniar/dataflow-studio/releases/download/v1.0.0/dataflow-studio-demo.mp4).
+For Windows, download and extract the [portable app](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/DataFlowStudio-Windows.zip), then open `DataFlowStudio.exe`. Keep the full extracted folder together. The [release](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.1.0) also includes the source ZIP and [60-second video](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/dataflow-studio-demo.mp4).
 
 Python 3.11 or newer with Tk support is required. Python 3.12 is recommended for the Windows build. From the repository root:
 
@@ -61,14 +63,14 @@ The demo creates cleaned CSV/XLSX files, a merged table, batch exports and a JSO
 
 ## GUI usage
 
-1. Click **Upload Files** and select one or more `.csv` or `.xlsx` files. Select the active file and, for Excel, the worksheet in the top bar.
+1. Click **Add files** and select one or more `.csv` or `.xlsx` files. Select the active file and, for Excel, the worksheet in the top bar.
 2. In **Data Cleaning**, choose operations and optional duplicate key columns. Add a replacement rule to fill missing values.
 3. In **Transform Data**, add rename, selection, ordering, conversion, mapping, filter or sorting rules. Review the workflow configuration.
 4. Click **Run Workflow**, then inspect **Before / After**. Each run starts from the loaded original table.
 5. Click **Export Result** to save a new CSV or XLSX file. Use **Run Batch** to apply the same workflow to all workspace files.
 6. Use **Merge Files** to append tables or **Convert Files** for format conversion. Inspect outcomes in **History & Logs**.
 
-**Load JSON** and **Save JSON** reuse workflows. **Settings** controls the appearance, export folder, CSV encoding and delimiter, collision policy, batch format and logging level. Settings and history apply to the current session. CSV import settings should be selected before loading files.
+**Load** and **Save** reuse JSON workflows. The workflow panel lists the selected operations; **View JSON** opens the underlying configuration separately. Transformation forms show the fields needed for the selected operation. **Settings** controls the appearance, export folder, CSV encoding and delimiter, collision policy, batch format and logging level. Settings and history apply to the current session. CSV import settings should be selected before loading files.
 
 The desktop preview is limited to 100 rows; it always reports the full row count. Processing works on the complete in-memory table.
 

@@ -2,6 +2,8 @@
 
 Date: 25 October 2026. Environment: Windows 11 x64, Python 3.12.0.
 
+Current release: **1.1.0**, with the redesigned desktop workspace. Local tests and the real desktop smoke were rerun for this revision. The desktop check also forces garbage collection in a worker after page changes and verifies that destroyed Tk variables were reclaimed on the main thread.
+
 ## Executed local checks
 
 | Check | Observed result |
@@ -39,7 +41,9 @@ The local verification files under `artifacts/` contain detailed JSON evidence a
 
 ## Remote CI
 
-[Run 40139251864](https://github.com/Dxniar/dataflow-studio/actions/runs/40139251864) completed successfully for code commit `0a90edcb555eced6076f7c07a2d46314da5f8967`. All seven jobs passed: six Windows/Linux and Python 3.11–3.13 test jobs, plus the Windows portable build. The jobs ran lint, formatting, tests, the reproducible demo and package builds. Later demo-driver, documentation and screenshot updates do not change the tested processing code. [GitHub Actions](https://github.com/Dxniar/dataflow-studio/actions/workflows/ci.yml) remains the live source for future remote status.
+The 1.1.0 workflow run is being verified during release preparation. Its final run link is recorded before release handoff.
+
+Historical 1.0 validation: [run 40139251864](https://github.com/Dxniar/dataflow-studio/actions/runs/40139251864) passed all seven jobs for commit `0a90edcb555eced6076f7c07a2d46314da5f8967`. [GitHub Actions](https://github.com/Dxniar/dataflow-studio/actions/workflows/ci.yml) remains the live source for remote status.
 
 ## Practical limits
 
