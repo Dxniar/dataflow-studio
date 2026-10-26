@@ -8,19 +8,25 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 import pandas as pd
 
 from dataflow.core.configuration import PipelineConfig
+from dataflow.core.errors import DataFlowError
+from dataflow.core.importing import ImportOptions
 from dataflow.core.io import list_sheets, read_table, write_table
-from dataflow.core.processor import batch_process, merge_files
+from dataflow.core.jobs import JobCancelled
+from dataflow.core.processor import BatchResult, batch_process, merge_files
+from dataflow.core.quality import ValidationRules, validate_data
 from dataflow.gui import theme as t
 from dataflow.gui.components import button, label, option
 from dataflow.gui.controller import TaskRunner, run_pipeline, save_workflow, workflow_text
 from dataflow.gui.icons import icon
 from dataflow.gui.pages import build_page
+from dataflow.gui.workspace import CheckpointSaveError, DesktopWorkspace, batch_checkpoint
+from dataflow.services.instance import WorkspaceLease
 from dataflow.utils.logging_config import configure_gui_logging
 
 logger = logging.getLogger("dataflow.gui")
@@ -41,6 +47,7 @@ class DataFlowApp(ctk.CTk):
         "Dashboard",
         "Data Cleaning",
         "Transform Data",
+        "Data Validation",
         "Merge Files",
         "Convert Files",
         "Before / After",
@@ -73,6 +80,12 @@ class DataFlowApp(ctk.CTk):
         self._on_success: Callable | None = None
         self._actions: list = []
         self._closed = False
+        self._save_after = None
+        self._active_job_id = None
+        self.last_batch_job_id = None
+        self.quality_report = None
+        self.import_options = ImportOptions().to_dict()
+        self.validation_rules = ValidationRules().to_dict()
         self.page_name = "Dashboard"
         self.clean_vars = {
             name: ctk.BooleanVar(value=False)
@@ -95,6 +108,10 @@ class DataFlowApp(ctk.CTk):
         self.merge_mode_var = ctk.StringVar(value="union")
         self.theme_var = ctk.StringVar(value="Midnight")
         self.log_level_var = ctk.StringVar(value="INFO")
+        self.workspace = DesktopWorkspace()
+        self.history = self.workspace.history
+        self.saved_recent_files = self.workspace.state.get("recent_files", [])
+        self._restore_preferences()
         try:
             self.log_path = configure_gui_logging()
         except OSError:
@@ -102,6 +119,13 @@ class DataFlowApp(ctk.CTk):
         self._status_text = "Ready  ·  Your data stays on your computer"
         self._status_color = t.MUTED
         self._build_shell()
+        if self.workspace.warning:
+            self.set_status(self.workspace.warning, error=True)
+        for variable in self.preference_variables().values():
+            variable.trace_add("write", lambda *_: self._schedule_save())
+        for variable in self.clean_vars.values():
+            variable.trace_add("write", lambda *_: self._schedule_save())
+        self.dedupe_var.trace_add("write", lambda *_: self._schedule_save())
         self.protocol("WM_DELETE_WINDOW", self._close)
         self.after(70, self._poll_tasks)
 
@@ -144,6 +168,7 @@ class DataFlowApp(ctk.CTk):
             "Dashboard": "table",
             "Data Cleaning": "clean",
             "Transform Data": "transform",
+            "Data Validation": "check",
             "Merge Files": "merge",
             "Convert Files": "convert",
             "Before / After": "compare",
@@ -152,7 +177,16 @@ class DataFlowApp(ctk.CTk):
         }
         groups = [
             ("WORKSPACE", ["Dashboard", "Before / After", "History & Logs"]),
-            ("DATA TOOLS", ["Data Cleaning", "Transform Data", "Merge Files", "Convert Files"]),
+            (
+                "DATA TOOLS",
+                [
+                    "Data Cleaning",
+                    "Transform Data",
+                    "Data Validation",
+                    "Merge Files",
+                    "Convert Files",
+                ],
+            ),
         ]
         for title, names in groups:
             label(sidebar, title, size=9, color=t.SUBTLE, bold=True, height=18).pack(
@@ -165,7 +199,7 @@ class DataFlowApp(ctk.CTk):
                     anchor="w",
                     image=icon(self.nav_icons[name], t.MUTED),
                     compound="left",
-                    height=36,
+                    height=33,
                     width=178,
                     corner_radius=6,
                     border_spacing=12,
@@ -228,6 +262,8 @@ class DataFlowApp(ctk.CTk):
         )
         upload.pack(side="right")
         self.upload_button = upload
+        self.import_button = button(top, "Import settings", self.edit_import_settings, width=125)
+        self.import_button.pack(side="right", padx=(0, 8))
         self.file_bar = ctk.CTkFrame(
             self.content, fg_color=t.PANEL, corner_radius=7, border_width=1, border_color=t.BORDER
         )
@@ -268,6 +304,9 @@ class DataFlowApp(ctk.CTk):
         )
         self.progress.pack(side="right", padx=(12, 0))
         self.progress.set(0)
+        self.cancel_button = button(status, "Cancel", self.cancel_job, width=72, height=28)
+        self.cancel_button.pack(side="right", padx=(8, 0))
+        self.cancel_button.configure(state="disabled")
         self._refresh_file_bar()
         self.show_page(self.page_name)
 
@@ -276,7 +315,7 @@ class DataFlowApp(ctk.CTk):
             raise ValueError(f"Unknown page: {name}")
         self.page_name = name
         self.workflow_preview = None
-        self._actions = [self.upload_button]
+        self._actions = [self.upload_button, self.import_button]
         for widget in self.page.winfo_children():
             widget.destroy()
         # Destroyed Tk controls can retain Python callback cycles. Reclaim their
@@ -287,10 +326,11 @@ class DataFlowApp(ctk.CTk):
             "Dashboard": "Your files and data, in one workspace.",
             "Data Cleaning": "Choose the changes your data needs.",
             "Transform Data": "Shape columns and records with reusable rules.",
+            "Data Validation": "Check records and export the rows that need attention.",
             "Merge Files": "Bring compatible tables together.",
             "Convert Files": "Move between CSV and Excel formats.",
             "Before / After": "Review every change before exporting.",
-            "History & Logs": "Your session activity and exported files.",
+            "History & Logs": "Saved activity, job checkpoints and exported files.",
             "Settings": "Make this workspace your own.",
         }
         self.page_hint.configure(text=hints[name])
@@ -326,7 +366,7 @@ class DataFlowApp(ctk.CTk):
 
     @staticmethod
     def _time():
-        return datetime.now().strftime("%H:%M:%S")
+        return datetime.now().isoformat(timespec="seconds")
 
     def _set_busy(self, busy):
         for widget in self._actions:
@@ -345,11 +385,23 @@ class DataFlowApp(ctk.CTk):
             self.progress.stop()
             self.progress.configure(mode="determinate")
             self.progress.set(0)
+        self.cancel_button.configure(state="normal" if busy else "disabled")
 
-    def _submit(self, name, work, on_success):
+    def _submit(self, name, work, on_success, *, kind=None, payload=None, job_id=None):
         if self.busy:
             return False
         self.last_error = None
+        self._persist_workspace()
+        self._active_job_id = job_id or self.workspace.create_job(kind or name, payload or {})
+        recorded = self.workspace.update_job(self._active_job_id, "running")
+        if kind == "batch" and not recorded:
+            self._active_job_id = None
+            self.fail(
+                ValueError(
+                    "Cannot start a recoverable batch while the local workspace is unavailable."
+                )
+            )
+            return False
         self._on_success = on_success
         self.runner.submit(name, work)
         self._set_busy(True)
@@ -359,17 +411,52 @@ class DataFlowApp(ctk.CTk):
     def _poll_tasks(self):
         if self._closed:
             return
+        events = self.runner.poll_progress()
+        if events and self.busy:
+            event = events[-1]
+            self.progress.stop()
+            self.progress.configure(mode="determinate")
+            self.progress.set(event.fraction)
+            if not self.runner.control.cancelled:
+                self.set_status(f"{event.stage}: {event.completed}/{event.total}  {event.message}")
         outcome = self.runner.poll()
         if outcome is not None:
             self._set_busy(False)
-            if outcome.error:
+            if isinstance(outcome.error, CheckpointSaveError):
+                self.workspace.unsafe_jobs.add(self._active_job_id)
+                self.workspace.update_job(
+                    self._active_job_id, "interrupted", error=str(outcome.error)
+                )
+                self.fail(outcome.error)
+            elif isinstance(outcome.error, JobCancelled):
+                self.workspace.update_job(self._active_job_id, "cancelled")
+                self.history.append(
+                    {"time": self._time(), "action": "Cancelled", "detail": outcome.name}
+                )
+                self.set_status("Cancelled safely. Previously completed outputs are kept.")
+            elif outcome.error:
+                self.workspace.update_job(self._active_job_id, "failed", error=str(outcome.error))
                 self.fail(outcome.error)
             elif self._on_success:
                 try:
+                    status = "completed"
+                    checkpoint = None
+                    if isinstance(outcome.value, BatchResult):
+                        checkpoint = outcome.value.to_dict()
+                        status = (
+                            "cancelled"
+                            if outcome.value.cancelled
+                            else "failed"
+                            if outcome.value.errors
+                            else "completed"
+                        )
+                    self.workspace.update_job(self._active_job_id, status, checkpoint=checkpoint)
                     self._on_success(outcome.value)
                 except Exception as error:
                     self.fail(error)
             self._on_success = None
+            self._active_job_id = None
+            self._persist_workspace()
         self.after(70, self._poll_tasks)
 
     def _import_options(self):
@@ -379,33 +466,180 @@ class DataFlowApp(ctk.CTk):
             "delimiter": "\t" if delimiter == "\\t" else delimiter,
         }
 
+    def preference_variables(self):
+        return {
+            "encoding": self.encoding_var,
+            "delimiter": self.delimiter_var,
+            "output_dir": self.output_dir_var,
+            "collision": self.collision_var,
+            "output_format": self.output_format_var,
+            "merge_mode": self.merge_mode_var,
+            "theme": self.theme_var,
+            "log_level": self.log_level_var,
+        }
+
+    def _restore_preferences(self):
+        state = self.workspace.state
+        choices = {
+            "encoding": {"utf-8-sig", "utf-8", "cp1251", "latin-1", "utf-16"},
+            "delimiter": {",", ";", "\\t", "|"},
+            "collision": {"unique", "error"},
+            "output_format": {"csv", "xlsx"},
+            "merge_mode": {"union", "strict", "intersection"},
+            "theme": {"Midnight", "Graphite"},
+            "log_level": {"DEBUG", "INFO", "WARNING", "ERROR"},
+        }
+        settings = state.get("settings", {})
+        if isinstance(settings, dict):
+            for name, variable in self.preference_variables().items():
+                value = settings.get(name)
+                if isinstance(value, str) and (
+                    (name == "output_dir" and value.strip()) or value in choices.get(name, set())
+                ):
+                    variable.set(value)
+        try:
+            self.config_data = PipelineConfig.from_dict(state.get("workflow", {})).to_dict()
+            self.import_options = ImportOptions.from_dict(state.get("import_options", {})).to_dict()
+            self.validation_rules = ValidationRules.from_dict(
+                state.get("validation_rules", {})
+            ).to_dict()
+        except ValueError:
+            self.workspace.warning = "Saved configuration needs attention. Defaults were restored; source files are unchanged."
+        for key, variable in self.clean_vars.items():
+            variable.set(self.config_data.get(key, False))
+        self.dedupe_var.set(", ".join(self.config_data.get("deduplicate_by") or []))
+        self.saved_recent_files = [
+            item
+            for item in (
+                self.saved_recent_files if isinstance(self.saved_recent_files, list) else []
+            )
+            if isinstance(item, dict)
+            and isinstance(item.get("path"), str)
+            and type(item.get("sheet", 0)) in (str, int)
+        ][:30]
+        self.last_batch_job_id = state.get("last_batch_job_id")
+        if not isinstance(self.last_batch_job_id, str):
+            self.last_batch_job_id = None
+        if self.theme_var.get() == "Graphite":
+            t.BG, t.SIDEBAR = "#15171D", "#1D2029"
+        else:
+            t.BG, t.SIDEBAR = "#0D1219", "#10161F"
+        self.configure(fg_color=t.BG)
+
+    def _schedule_save(self):
+        if self._save_after is not None:
+            self.after_cancel(self._save_after)
+        self._save_after = self.after(300, self._persist_workspace)
+
+    def _persist_workspace(self):
+        self._save_after = None
+        try:
+            payload = {
+                "settings": {name: var.get() for name, var in self.preference_variables().items()},
+                "workflow": self.collect_config(),
+                "import_options": self.import_options,
+                "validation_rules": self.validation_rules,
+                "recent_files": [
+                    {"path": str(item.path.resolve()), "sheet": item.sheet} for item in self.files
+                ]
+                if self.files
+                else self.saved_recent_files,
+                "last_batch_job_id": self.last_batch_job_id,
+            }
+            self.workspace.save(payload)
+        except (ValueError, OSError):
+            # An incomplete edit is not a valid replacement for the last saved workflow.
+            logger.warning("Workspace snapshot skipped while configuration is incomplete")
+
+    def restore_workspace(self):
+        if self.busy:
+            return False
+        if not self.saved_recent_files:
+            self.set_status("No saved files to restore. Add files to start a workspace.")
+            return False
+        return self.load_paths(
+            [item["path"] for item in self.saved_recent_files],
+            restore_entries=self.saved_recent_files,
+        )
+
+    def edit_import_settings(self):
+        if self.busy:
+            return
+        from dataflow.gui.import_dialog import ImportDialog
+
+        ImportDialog(self, path=self.current_file.path if self.current_file else None)
+
+    def cancel_job(self):
+        if self.runner.cancel():
+            self.workspace.update_job(self._active_job_id, "cancel_requested")
+            self.cancel_button.configure(state="disabled")
+            self.set_status(
+                "Cancelling safely after the current step. Completed outputs will be kept."
+            )
+
     def choose_files(self):
         paths = filedialog.askopenfilenames(
             title="Upload CSV or Excel files", filetypes=[("Data files", "*.csv *.xlsx")]
         )
         if paths:
-            self.load_paths(paths)
+            from dataflow.gui.import_dialog import ImportDialog
 
-    def load_paths(self, paths):
+            existing = {item.path.resolve(): index for index, item in enumerate(self.files)}
+            new_paths = [path for path in paths if Path(path).resolve() not in existing]
+            if not new_paths:
+                self.select_file(existing[Path(paths[0]).resolve()])
+                self.edit_import_settings()
+            else:
+                ImportDialog(self, paths=new_paths, path=new_paths[0])
+
+    def load_paths(self, paths, *, restore_entries=None):
         """Add files asynchronously; loaded originals are retained for comparison."""
         options = self._import_options()
         existing = {item.path.resolve() for item in self.files}
-        paths = [Path(path) for path in paths if Path(path).resolve() not in existing]
+        unique_paths = []
+        for value in paths:
+            path = Path(value).resolve()
+            if path not in existing:
+                existing.add(path)
+                unique_paths.append(path)
+        paths = unique_paths
         if not paths:
             self.set_status("These files are already in the workspace.")
             return False
 
         def load():
             loaded, errors = [], []
-            for path in paths:
+            restored = {str(Path(item["path"]).resolve()): item for item in (restore_entries or [])}
+            for index, path in enumerate(paths):
+                self.runner.control.checkpoint()
                 try:
-                    sheets = list_sheets(path) if path.suffix.lower() == ".xlsx" else []
-                    sheet = sheets[0] if sheets else 0
-                    loaded.append(
-                        LoadedFile(path, read_table(path, sheet=sheet, **options), sheets, sheet)
+                    sheets = (
+                        list_sheets(path, import_options=self.import_options)
+                        if path.suffix.lower() == ".xlsx"
+                        else []
                     )
+                    sheet = restored.get(str(path.resolve()), {}).get(
+                        "sheet", sheets[0] if sheets else 0
+                    )
+                    loaded.append(
+                        LoadedFile(
+                            path,
+                            read_table(
+                                path,
+                                sheet=sheet,
+                                import_options=self.import_options,
+                                control=self.runner.control,
+                                **options,
+                            ),
+                            sheets,
+                            sheet,
+                        )
+                    )
+                except JobCancelled:
+                    raise
                 except Exception as error:
                     errors.append(f"{path.name}: {error}")
+                self.runner.control.report("Loading files", index + 1, len(paths))
             return loaded, errors
 
         def finish(payload):
@@ -414,6 +648,10 @@ class DataFlowApp(ctk.CTk):
                 self.selected_index = len(self.files)
                 self.files.extend(loaded)
                 self.result = None
+                self.quality_report = None
+                self.saved_recent_files = [
+                    {"path": str(item.path.resolve()), "sheet": item.sheet} for item in self.files
+                ]
                 self._refresh_file_bar()
                 self.show_page(self.page_name)
                 self.history.append(
@@ -431,7 +669,9 @@ class DataFlowApp(ctk.CTk):
                     success=True,
                 )
 
-        return self._submit("Loading files", load, finish)
+        return self._submit(
+            "Loading files", load, finish, payload={"paths": [str(path) for path in paths]}
+        )
 
     def _refresh_file_bar(self):
         values = [f"{index + 1}. {item.path.name}" for index, item in enumerate(self.files)]
@@ -458,6 +698,7 @@ class DataFlowApp(ctk.CTk):
             return
         self.selected_index = index
         self.result = None
+        self.quality_report = None
         self._refresh_file_bar()
         self.show_page(self.page_name)
 
@@ -470,12 +711,21 @@ class DataFlowApp(ctk.CTk):
         def finish(frame):
             current.frame, current.sheet = frame, sheet
             self.result = None
+            self.quality_report = None
             self._refresh_file_bar()
             self.show_page(self.page_name)
             self.set_status(f"Loaded worksheet {sheet}", success=True)
 
         self._submit(
-            "Reading worksheet", lambda: read_table(current.path, sheet=sheet, **options), finish
+            "Reading worksheet",
+            lambda: read_table(
+                current.path,
+                sheet=sheet,
+                import_options=self.import_options,
+                control=self.runner.control,
+                **options,
+            ),
+            finish,
         )
 
     def apply_config(self, config_dict):
@@ -484,6 +734,7 @@ class DataFlowApp(ctk.CTk):
             variable.set(self.config_data.get(key, False))
         self.dedupe_var.set(", ".join(self.config_data.get("deduplicate_by") or []))
         self.show_page(self.page_name)
+        self._schedule_save()
 
     def collect_config(self):
         config = dict(self.config_data)
@@ -521,6 +772,10 @@ class DataFlowApp(ctk.CTk):
         self.files.pop(index)
         self.selected_index = min(self.selected_index, max(0, len(self.files) - 1))
         self.result = None
+        self.quality_report = None
+        self.saved_recent_files = [
+            {"path": str(item.path.resolve()), "sheet": item.sheet} for item in self.files
+        ]
         self._refresh_file_bar()
         self.show_page(self.page_name)
         self.set_status("File removed from workspace. The source file is unchanged.")
@@ -535,13 +790,20 @@ class DataFlowApp(ctk.CTk):
         def finish(frame):
             current.frame = frame
             self.result = None
+            self.quality_report = None
             self._refresh_file_bar()
             self.show_page(self.page_name)
             self.set_status("Active file reloaded using the current CSV settings.", success=True)
 
         return self._submit(
             "Reloading active file",
-            lambda: read_table(current.path, sheet=current.sheet, **options),
+            lambda: read_table(
+                current.path,
+                sheet=current.sheet,
+                import_options=self.import_options,
+                control=self.runner.control,
+                **options,
+            ),
             finish,
         )
 
@@ -557,11 +819,16 @@ class DataFlowApp(ctk.CTk):
         frame, source = self.current_frame, str(self.current_file.path)
 
         def process():
-            result = run_pipeline(frame, config)
+            result = run_pipeline(frame, config, control=self.runner.control)
             result.source_paths = [source]
             return result
 
-        return self._submit("Processing selected operations", process, self._accept_result)
+        return self._submit(
+            "Processing selected operations",
+            process,
+            self._accept_result,
+            payload={"source": source, "workflow": config, "import_options": self.import_options},
+        )
 
     def _accept_result(self, result):
         self.result = result
@@ -591,7 +858,14 @@ class DataFlowApp(ctk.CTk):
         sheet = self.current_file.sheet
         return self._submit(
             "Merging files",
-            lambda: merge_files(paths, mode=mode, sheet=sheet, **options),
+            lambda: merge_files(
+                paths,
+                mode=mode,
+                sheet=sheet,
+                import_options=self.import_options,
+                control=self.runner.control,
+                **options,
+            ),
             self._accept_result,
         )
 
@@ -626,6 +900,7 @@ class DataFlowApp(ctk.CTk):
                 path,
                 collision=collision,
                 source_paths=result.source_paths,
+                control=self.runner.control,
                 **options,
             ),
             finish,
@@ -660,7 +935,12 @@ class DataFlowApp(ctk.CTk):
         return self._submit(
             "Converting file",
             lambda: write_table(
-                current.frame, path, collision=collision, source_paths=[current.path], **options
+                current.frame,
+                path,
+                collision=collision,
+                source_paths=[current.path],
+                control=self.runner.control,
+                **options,
             ),
             finish,
         )
@@ -680,35 +960,88 @@ class DataFlowApp(ctk.CTk):
             )
         if not output_dir:
             return False
-        paths, options = [item.path for item in self.files], self._import_options()
-        output_format, sheet = self.output_format_var.get(), self.current_file.sheet
-        collision = self.collision_var.get()
+        payload = {
+            "paths": [str(item.path.resolve()) for item in self.files],
+            "config": config.to_dict(),
+            "output_dir": str(Path(output_dir).resolve()),
+            "output_format": self.output_format_var.get(),
+            "sheet": self.current_file.sheet,
+            "collision": self.collision_var.get(),
+            "io_options": self._import_options(),
+            "import_options": self.import_options,
+        }
+        return self._begin_batch(payload)
+
+    def _begin_batch(self, payload, *, job_id=None, resume_from=None):
+        if self.busy:
+            return False
+        try:
+            config = PipelineConfig.from_dict(payload["config"])
+            imports = ImportOptions.from_dict(payload.get("import_options", {}))
+            paths = [Path(path) for path in payload["paths"]]
+            output_dir = Path(payload["output_dir"])
+            options = dict(payload["io_options"])
+            output_format, sheet, collision = (
+                payload["output_format"],
+                payload["sheet"],
+                payload["collision"],
+            )
+            if resume_from is not None:
+                resume_from = BatchResult.from_dict(resume_from)
+                if not resume_from.errors and not resume_from.pending:
+                    self.set_status("This batch has no failed or unfinished files.", success=True)
+                    return False
+        except (ValueError, TypeError, KeyError):
+            self.fail(
+                ValueError(
+                    "Saved batch options are invalid. Start a new batch with current settings."
+                )
+            )
+            return False
+        initial_checkpoint = (
+            resume_from.to_dict()
+            if resume_from is not None
+            else {
+                "successes": [],
+                "errors": [],
+                "pending": list(dict.fromkeys(str(path) for path in paths)),
+                "cancelled": False,
+            }
+        )
+        payload = {**payload, "resume_from": initial_checkpoint}
+        job_id = job_id or self.workspace.create_job("batch", payload)
+        if not job_id or not self.workspace.update_job(
+            job_id, "pending", checkpoint=initial_checkpoint
+        ):
+            self.fail(
+                ValueError(
+                    "Cannot save a batch checkpoint. Check local workspace permissions or available disk space."
+                )
+            )
+            return False
+        self.last_batch_job_id = job_id
+        self.last_batch = None
+
+        def checkpoint(result):
+            if not self.workspace.update_job(job_id, "running", checkpoint=result.to_dict()):
+                self.workspace.unsafe_jobs.add(job_id)
+                raise CheckpointSaveError(
+                    "Cannot save the latest checkpoint. Batch stopped; completed outputs are kept. Review existing outputs before recovery."
+                )
 
         def finish(result):
             self.last_batch = result
             self.history.append(
                 {
                     "time": self._time(),
-                    "action": "Batch",
-                    "detail": f"{len(result.successes)} succeeded · {len(result.errors)} failed · {output_dir}",
+                    "action": "Batch cancelled" if result.cancelled else "Batch",
+                    "detail": f"{len(result.successes)} succeeded · {len(result.errors)} failed · {len(result.pending)} pending · {output_dir}",
                 }
             )
-            for item in result.successes:
-                self.history.append(
-                    {"time": self._time(), "action": "Batch export", "detail": str(item["output"])}
-                )
-            for item in result.errors:
-                self.history.append(
-                    {
-                        "time": self._time(),
-                        "action": "Batch error",
-                        "detail": f"{item['input']}: {item['error']}",
-                    }
-                )
             self.show_page("History & Logs")
             self.set_status(
-                f"Batch complete: {len(result.successes)} succeeded, {len(result.errors)} failed.",
-                success=not result.errors,
+                f"Batch {'cancelled safely' if result.cancelled else 'complete'}: {len(result.successes)} succeeded, {len(result.errors)} failed, {len(result.pending)} pending.",
+                success=not result.errors and not result.cancelled,
                 error=bool(result.errors),
             )
 
@@ -721,6 +1054,103 @@ class DataFlowApp(ctk.CTk):
                 output_format=output_format,
                 sheet=sheet,
                 collision=collision,
+                import_options=imports,
+                control=self.runner.control,
+                checkpoint_callback=checkpoint,
+                resume_from=resume_from,
+                **options,
+            ),
+            finish,
+            kind="batch",
+            payload=payload,
+            job_id=job_id,
+        )
+
+    def retry_batch(self, job_id=None):
+        job = self.workspace.get_job(job_id or self.last_batch_job_id)
+        if not job or job["kind"] != "batch":
+            self.fail(ValueError("No saved batch is available. Run a batch first."))
+            return False
+        checkpoint = batch_checkpoint(job)
+        if checkpoint is None:
+            self.fail(
+                ValueError(
+                    "Saved checkpoint is invalid. Start a new batch; existing outputs are unchanged."
+                )
+            )
+            return False
+        if job["status"] == "interrupted" or job["id"] in self.workspace.unsafe_jobs:
+            # Publication and SQLite checkpoints are separate transactions. After a
+            # hard stop an existing destination is ambiguous, so recovery must not
+            # create another numbered output. Persist this policy in a new job.
+            payload = {**job["payload"], "collision": "error"}
+            return self._begin_batch(payload, resume_from=checkpoint)
+        return self._begin_batch(job["payload"], job_id=job["id"], resume_from=checkpoint)
+
+    def apply_validation_rules(self, rules):
+        self.validation_rules = ValidationRules.from_dict(rules).to_dict()
+        self.quality_report = None
+        self._schedule_save()
+        self.show_page("Data Validation")
+
+    def run_validation(self):
+        if self.current_frame is None:
+            self.fail(ValueError("Add a file before checking data."))
+            return False
+        frame = self.current_frame
+        rules = ValidationRules.from_dict(self.validation_rules)
+
+        def finish(report):
+            self.quality_report = report
+            summary = report.summary()
+            self.history.append(
+                {
+                    "time": self._time(),
+                    "action": "Validation",
+                    "detail": f"{summary['valid_rows']} valid · {summary['invalid_rows']} rejected · {len(summary['schema_errors'])} schema errors",
+                }
+            )
+            self.show_page("Data Validation")
+            self.set_status("Data check complete. Source data is unchanged.", success=True)
+
+        return self._submit(
+            "Checking data",
+            lambda: validate_data(frame, rules, control=self.runner.control),
+            finish,
+            payload={"source": str(self.current_file.path), "rules": rules.to_dict()},
+        )
+
+    def export_problems(self, path=None):
+        if self.quality_report is None:
+            self.fail(ValueError("Check data before exporting rejected rows."))
+            return False
+        path = path or filedialog.asksaveasfilename(
+            title="Export rejected rows",
+            initialdir=self.output_dir_var.get(),
+            initialfile="rejected_rows.csv",
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv"), ("Excel", "*.xlsx")],
+        )
+        if not path:
+            return False
+        frame = self.quality_report.problem_rows
+        options, collision = self._import_options(), self.collision_var.get()
+        sources = [item.path for item in self.files]
+
+        def finish(output):
+            self.history.append(
+                {"time": self._time(), "action": "Validation export", "detail": str(output)}
+            )
+            self.set_status(f"Rejected rows exported: {output}", success=True)
+
+        return self._submit(
+            "Exporting rejected rows",
+            lambda: write_table(
+                frame,
+                path,
+                collision=collision,
+                source_paths=sources,
+                control=self.runner.control,
                 **options,
             ),
             finish,
@@ -770,9 +1200,19 @@ class DataFlowApp(ctk.CTk):
         if self.busy:
             self.set_status("An operation is running. Wait for it to finish before closing.")
             return
+        if self._save_after is not None:
+            self.after_cancel(self._save_after)
+        self._persist_workspace()
         self._closed = True
         self.destroy()
 
 
 def main():
-    DataFlowApp().mainloop()
+    try:
+        with WorkspaceLease():
+            DataFlowApp().mainloop()
+    except DataFlowError as error:
+        notification = ctk.CTk()
+        notification.withdraw()
+        messagebox.showerror("DataFlow Studio", str(error), parent=notification)
+        notification.destroy()

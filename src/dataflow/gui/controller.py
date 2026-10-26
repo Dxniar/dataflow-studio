@@ -17,9 +17,9 @@ from dataflow.core.processor import ProcessingResult, process_frame
 from dataflow.core.validation import missing_count
 
 
-def run_pipeline(frame: pd.DataFrame, config_dict: dict) -> ProcessingResult:
+def run_pipeline(frame: pd.DataFrame, config_dict: dict, *, control=None) -> ProcessingResult:
     """Validate the GUI configuration and execute the shared core pipeline."""
-    return process_frame(frame, PipelineConfig.from_dict(config_dict))
+    return process_frame(frame, PipelineConfig.from_dict(config_dict), control=control)
 
 
 def preview_data(frame: pd.DataFrame, limit: int = 100) -> dict:
@@ -78,10 +78,16 @@ class TaskRunner:
     def __init__(self):
         self.busy = False
         self._queue: Queue[TaskOutcome] = Queue()
+        self._progress_queue: Queue = Queue()
+        self.control = None
 
     def submit(self, name: str, function: Callable[[], Any]) -> bool:
+        from dataflow.core.jobs import JobControl
+
         if self.busy:
             return False
+        self.poll_progress()
+        self.control = JobControl(progress_callback=self._progress_queue.put)
         self.busy = True
 
         def run():
@@ -92,6 +98,20 @@ class TaskRunner:
 
         Thread(target=run, name="dataflow-worker", daemon=True).start()
         return True
+
+    def cancel(self) -> bool:
+        if not self.busy or self.control is None:
+            return False
+        self.control.cancel()
+        return True
+
+    def poll_progress(self) -> list:
+        events = []
+        while True:
+            try:
+                events.append(self._progress_queue.get_nowait())
+            except Empty:
+                return events
 
     def poll(self) -> TaskOutcome | None:
         try:

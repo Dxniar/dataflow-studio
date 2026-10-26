@@ -13,6 +13,7 @@ import typer
 
 from dataflow.core.configuration import PipelineConfig
 from dataflow.core.errors import DataFlowError
+from dataflow.core.importing import ImportOptions
 from dataflow.core.io import list_sheets, read_table, write_table
 from dataflow.core.processor import (
     ProcessingResult,
@@ -20,6 +21,7 @@ from dataflow.core.processor import (
     merge_files,
     process_file,
 )
+from dataflow.core.quality import ValidationRules, validate_data
 from dataflow.core.validation import empty_mask
 
 app = typer.Typer(
@@ -59,6 +61,10 @@ OptionalOutput = Annotated[
     typer.Option("--output", "-o", help="Output path. Default: a unique INPUT_processed file."),
 ]
 Config = Annotated[Path, typer.Option("--config", "-c", help="JSON pipeline configuration file.")]
+ImportConfig = Annotated[
+    Path | None,
+    typer.Option("--import-config", help="JSON import schema, formats and safety limits."),
+]
 Sheet = Annotated[
     str,
     typer.Option(
@@ -111,16 +117,21 @@ def _run(operation: Callable[[], T]) -> T:
     raise typer.Exit(code=1)
 
 
-def _io_options(sheet: str, encoding: str, delimiter: str) -> dict:
+def _io_options(
+    sheet: str, encoding: str, delimiter: str, import_config: Path | None = None
+) -> dict:
     if sheet.startswith("name:"):
         selected_sheet: str | int = sheet[5:]
     else:
         selected_sheet = int(sheet) if sheet.isdecimal() else sheet
-    return {
+    options = {
         "sheet": selected_sheet,
         "encoding": encoding,
         "delimiter": "\t" if delimiter == "\\t" else delimiter,
     }
+    if import_config is not None:
+        options["import_options"] = ImportOptions.from_json(import_config)
+    return options
 
 
 def _emit(report: dict) -> None:
@@ -230,6 +241,7 @@ def clean(
     encoding: Encoding = "utf-8-sig",
     delimiter: Delimiter = ",",
     collision: OptionalCollision = None,
+    import_config: ImportConfig = None,
 ) -> None:
     """Clean a table using explicitly selected operations. No cleaning is enabled by default."""
     if deduplicate_by and not drop_duplicates:
@@ -256,7 +268,7 @@ def clean(
             PipelineConfig.from_dict(settings),
             output,
             collision,
-            _io_options(sheet, encoding, delimiter),
+            _io_options(sheet, encoding, delimiter, import_config),
         )
     )
     _emit(report)
@@ -271,6 +283,7 @@ def process(
     encoding: Encoding = "utf-8-sig",
     delimiter: Delimiter = ",",
     collision: OptionalCollision = None,
+    import_config: ImportConfig = None,
 ) -> None:
     """Execute a validated JSON pipeline and export its result."""
     report = _run(
@@ -279,7 +292,7 @@ def process(
             PipelineConfig.from_json(config),
             output,
             collision,
-            _io_options(sheet, encoding, delimiter),
+            _io_options(sheet, encoding, delimiter, import_config),
         )
     )
     _emit(report)
@@ -293,6 +306,7 @@ def convert(
     encoding: Encoding = "utf-8-sig",
     delimiter: Delimiter = ",",
     collision: CollisionOption = Collision.error,
+    import_config: ImportConfig = None,
 ) -> None:
     """Convert between CSV and XLSX. The output extension selects the format."""
     report = _run(
@@ -301,7 +315,7 @@ def convert(
             PipelineConfig.from_dict({}),
             output,
             collision,
-            _io_options(sheet, encoding, delimiter),
+            _io_options(sheet, encoding, delimiter, import_config),
         )
     )
     _emit(report)
@@ -318,9 +332,10 @@ def merge(
     encoding: Encoding = "utf-8-sig",
     delimiter: Delimiter = ",",
     collision: CollisionOption = Collision.error,
+    import_config: ImportConfig = None,
 ) -> None:
     """Append rows from multiple tables using union, strict, or intersection columns."""
-    options = _io_options(sheet, encoding, delimiter)
+    options = _run(lambda: _io_options(sheet, encoding, delimiter, import_config))
     report = _run(
         lambda: _export(
             merge_files(input_files, mode=mode.value, **options),
@@ -347,6 +362,7 @@ def batch(
     encoding: Encoding = "utf-8-sig",
     delimiter: Delimiter = ",",
     collision: CollisionOption = Collision.unique,
+    import_config: ImportConfig = None,
 ) -> None:
     """Process files independently. Exit 3 means some files succeeded and some failed."""
     result = _run(
@@ -356,7 +372,7 @@ def batch(
             output_dir,
             output_format=output_format.value,
             collision=collision.value,
-            **_io_options(sheet, encoding, delimiter),
+            **_io_options(sheet, encoding, delimiter, import_config),
         )
     )
     _emit({**result.summary(), "successes": result.successes, "errors": result.errors})
@@ -370,11 +386,13 @@ def inspect_file(
     sheet: Sheet = "0",
     encoding: Encoding = "utf-8-sig",
     delimiter: Delimiter = ",",
+    import_config: ImportConfig = None,
 ) -> None:
     """Report table metadata and missing counts without printing cell contents."""
 
     def inspect_metadata() -> dict:
-        frame = read_table(input_file, **_io_options(sheet, encoding, delimiter))
+        options = _io_options(sheet, encoding, delimiter, import_config)
+        frame = read_table(input_file, **options)
         report = {
             "input": str(input_file),
             "rows": len(frame),
@@ -385,10 +403,50 @@ def inspect_file(
             },
         }
         if input_file.suffix.lower() == ".xlsx":
-            report["sheets"] = list_sheets(input_file)
+            report["sheets"] = list_sheets(input_file, import_options=options.get("import_options"))
         return report
 
     _emit(_run(inspect_metadata))
+
+
+@app.command()
+def validate(
+    input_file: Input,
+    rules: Annotated[Path, typer.Option("--rules", help="JSON source validation rules.")],
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Optional rejected source records CSV or XLSX."),
+    ] = None,
+    import_config: ImportConfig = None,
+    sheet: Sheet = "0",
+    encoding: Encoding = "utf-8-sig",
+    delimiter: Delimiter = ",",
+    collision: CollisionOption = Collision.error,
+) -> None:
+    """Check source data without changing it. Exit 4 means validation found issues."""
+
+    def check_source() -> dict:
+        selected_rules = ValidationRules.from_json(rules)
+        options = _io_options(sheet, encoding, delimiter, import_config)
+        frame = read_table(input_file, **options)
+        quality = validate_data(frame, selected_rules)
+        report = quality.summary()
+        if output is not None:
+            path = write_table(
+                quality.problem_rows,
+                output,
+                encoding=encoding,
+                delimiter=options["delimiter"],
+                collision=collision.value,
+                source_paths=[input_file],
+            )
+            report["output"] = str(path)
+        return report
+
+    report = _run(check_source)
+    _emit(report)
+    if report["invalid_rows"] or report["schema_errors"]:
+        raise typer.Exit(code=4)
 
 
 if __name__ == "__main__":

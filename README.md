@@ -10,7 +10,7 @@ Clean messy customer tables, compare the changes, and export a result you can in
 
 This is an **AI-assisted personal portfolio project**. Every included customer record is synthetic. It is not a paid client case study, and it makes no claims about commercial results.
 
-Version **1.1** introduces a quieter desktop workspace: more room for tables, grouped navigation, consistent line icons, dark scrollbars and a readable workflow summary with a separate JSON inspector.
+Version **1.2** adds typed import schemas, read-only data checks with rejected-record exports, persistent local workspaces, and cancellable jobs with batch recovery. It retains the refined desktop workspace introduced in 1.1.
 
 ![DataFlow Studio dashboard](assets/screenshots/01-dashboard.png)
 
@@ -20,12 +20,14 @@ Small-business spreadsheets often arrive with repeated records, missing values, 
 
 ## Features
 
-- **Read CSV and XLSX:** choose an Excel worksheet, CSV encoding and delimiter; inspect columns, row counts and missing values.
+- **Read CSV and XLSX:** choose worksheet, encoding, delimiter, column types, explicit date formats and numeric separators before importing. Text IDs keep stored leading zeroes.
+- **Check data:** required columns/values, unique IDs, allowed values and numeric/date bounds; export rejected source records with readable reasons.
+- **Keep a workspace:** preferences, workflow, import schema, validation rules, recent paths, history and job checkpoints persist locally without table snapshots.
 - **Clean deliberately:** remove duplicates using all columns or selected keys, remove empty rows, trim text, fill missing values, normalize headers and map inconsistent values.
 - **Transform:** rename, drop, select and reorder columns; convert types; filter and sort rows.
 - **Merge:** append rows with union, strict or intersection column alignment.
 - **Convert:** CSV to XLSX and XLSX to CSV, including English, Russian and Kazakh text.
-- **Batch:** apply one workflow to multiple files, keep successful exports and report individual failures.
+- **Batch:** apply one workflow to multiple files, request cancellation, retain completed exports and retry only failed/pending files using saved options.
 - **Compare:** retain original and processed data, display calculated metrics, and preview up to 100 rows per table.
 - **Export safely:** protect input paths, reject existing filenames or create unique names, and publish complete temporary output files without overwriting existing data.
 - **Automate:** use the Typer CLI and validated JSON configuration. No Python expression evaluation is accepted in configuration.
@@ -33,7 +35,7 @@ Small-business spreadsheets often arrive with repeated records, missing values, 
 
 ## Installation
 
-For Windows, download and extract the [portable app](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/DataFlowStudio-Windows.zip), then open `DataFlowStudio.exe`. Keep the full extracted folder together. The [release](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.1.0) also includes the source ZIP and [60-second video](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/dataflow-studio-demo.mp4).
+For Windows, download and extract the [portable app](https://github.com/Dxniar/dataflow-studio/releases/download/v1.2.0/DataFlowStudio-Windows.zip), then open `DataFlowStudio.exe`. Keep the full extracted folder together. The [release](https://github.com/Dxniar/dataflow-studio/releases/tag/v1.2.0) also includes the source ZIP and SHA-256 checksums. The [1.1 demonstration video](https://github.com/Dxniar/dataflow-studio/releases/download/v1.1.0/dataflow-studio-demo.mp4) documents the earlier interface; see [1.2 workflow documentation](docs/PRODUCTION_WORKFLOWS.md) for the new features.
 
 Python 3.11 or newer with Tk support is required. Python 3.12 is recommended for the Windows build. From the repository root:
 
@@ -63,14 +65,16 @@ The demo creates cleaned CSV/XLSX files, a merged table, batch exports and a JSO
 
 ## GUI usage
 
-1. Click **Add files** and select one or more `.csv` or `.xlsx` files. Select the active file and, for Excel, the worksheet in the top bar.
+1. Click **Add files**, choose `.csv`/`.xlsx` files and review **Import settings** before loading. Choose **Text** for IDs, and set date/number formats when needed. The top-bar **Import settings** button reimports the active source safely.
 2. In **Data Cleaning**, choose operations and optional duplicate key columns. Add a replacement rule to fill missing values.
 3. In **Transform Data**, add rename, selection, ordering, conversion, mapping, filter or sorting rules. Review the workflow configuration.
 4. Click **Run Workflow**, then inspect **Before / After**. Each run starts from the loaded original table.
 5. Click **Export Result** to save a new CSV or XLSX file. Use **Run Batch** to apply the same workflow to all workspace files.
 6. Use **Merge Files** to append tables or **Convert Files** for format conversion. Inspect outcomes in **History & Logs**.
+7. In **Data Validation**, build checks, click **Check data**, then **Export rejected rows** to save the original problem records and reasons. Validation does not clean or change records.
+8. **Cancel** stops at a safe boundary. **History & Logs** shows saved batch jobs and **Resume / retry**. After restarting, **Restore saved files** reloads recent sources explicitly.
 
-**Load** and **Save** reuse JSON workflows. The workflow panel lists the selected operations; **View JSON** opens the underlying configuration separately. Transformation forms show the fields needed for the selected operation. **Settings** controls the appearance, export folder, CSV encoding and delimiter, collision policy, batch format and logging level. Settings and history apply to the current session. CSV import settings should be selected before loading files.
+**Load** and **Save** reuse JSON transformation workflows. The workflow panel lists selected operations; **View JSON** opens their configuration separately. **Settings** controls appearance, export folder, encoding, delimiter, collision policy, batch format and logging. Preferences and history survive restart; source table contents are not stored in the workspace database. See [reliable workflow details](docs/PRODUCTION_WORKFLOWS.md) for import/rule JSON, safety limits, cancellation and recovery semantics.
 
 The desktop preview is limited to 100 rows; it always reports the full row count. Processing works on the complete in-memory table.
 
@@ -191,19 +195,18 @@ docs/            Architecture, limitations, demo, portfolio and validation
 
 - Entire tables and before/after copies are held in memory. The bounded preview does not make this a streaming tool for very large files.
 - XLSX exports preserve table values, not workbook formatting, charts, macros or multi-sheet structure. Formulas are never evaluated; cached source values may be stale or absent.
-- pandas infers types on import. Numeric-looking identifiers can lose leading zeros; review your data before using a result. CSV carries no schema.
+- Default type inference remains available. Choose explicit text types before import to preserve stored identifiers. Numeric Excel cells cannot recover zeroes that exist only in their display formatting.
 - Exported formula-looking CSV text receives a leading apostrophe; XLSX text is written explicitly as text. This protects spreadsheet opening but can change text representation.
 - Merging appends rows. Relational joins, fuzzy matching, arbitrary expressions, remote URLs and password-protected workbooks are not supported.
 - Batch processing is sequential and is not an all-or-nothing transaction. Successfully exported files remain if another file fails.
-- GUI settings and history are session-local. Only one background job runs at a time; cancellation and persistent workflow scheduling are not implemented.
+- One background job runs at a time. Cancellation is cooperative; one pandas operation/parser call may finish before stopping. Scheduling and streaming processing are not implemented.
 
 Read the [full limitations and safety notes](docs/LIMITATIONS.md) before processing important data. Work on copies and inspect the exported result.
 
 ## Roadmap
 
-- Explicit import schemas for identifiers and dates.
-- Persistent workspace settings and searchable history.
-- Cancellable jobs and streaming CSV pipelines.
+- Streaming CSV pipelines for operations that can be processed incrementally.
+- Searchable run history and explicit scheduled workflows.
 - More accessible keyboard navigation and automated desktop coverage.
 - Signed Windows distribution and release packaging.
 

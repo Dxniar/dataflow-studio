@@ -222,3 +222,53 @@ def test_process_file_records_sources_and_metrics(tmp_path):
     result = process_file(path, PipelineConfig(drop_duplicates=True))
     assert result.source_paths == [str(path.resolve())]
     assert result.summary()["duplicates_removed"] == 1
+
+
+@pytest.mark.parametrize("extension", ["csv", "xlsx"])
+def test_export_cancelled_at_publication_leaves_no_output(tmp_path, extension):
+    from dataflow.core.jobs import JobCancelled, JobControl
+
+    control = JobControl()
+
+    def progress(event):
+        if event.stage == "publish":
+            control.cancel()
+
+    control = JobControl(progress)
+    with pytest.raises(JobCancelled):
+        write_table(
+            pd.DataFrame({"id": [1, 2]}), tmp_path / f"cancelled.{extension}", control=control
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_export_completed_file_is_success_when_cancel_arrives_after_publication(
+    tmp_path, monkeypatch
+):
+    import os
+
+    from dataflow.core.jobs import JobControl
+
+    control = JobControl()
+    publish = os.rename if os.name == "nt" else os.link
+
+    def publish_then_cancel(*args, **kwargs):
+        result = publish(*args, **kwargs)
+        control.cancel()
+        return result
+
+    monkeypatch.setattr(os, "rename" if os.name == "nt" else "link", publish_then_cancel)
+    output = write_table(pd.DataFrame({"id": [1]}), tmp_path / "complete.csv", control=control)
+    assert output.is_file()
+    assert read_table(output)["id"].tolist() == [1]
+
+
+def test_import_respects_preexisting_cancellation_without_sanitizing_it(tmp_path):
+    from dataflow.core.jobs import JobCancelled, JobControl
+
+    path = tmp_path / "input.csv"
+    path.write_text("id\n1\n", encoding="utf-8")
+    control = JobControl()
+    control.cancel()
+    with pytest.raises(JobCancelled):
+        read_table(path, control=control)

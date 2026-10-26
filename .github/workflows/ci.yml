@@ -38,6 +38,8 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install -e ".[dev]"
+      - name: Verify native desktop workflows and restart recovery
+        run: python scripts/gui_production_smoke.py
       - run: python scripts/build_windows.py
       - uses: actions/upload-artifact@v4
         with:

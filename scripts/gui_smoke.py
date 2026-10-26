@@ -3,6 +3,8 @@
 import gc
 import hashlib
 import json
+import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -27,7 +29,7 @@ def wait_for(app, *, allow_error=False):
         assert app.last_error is None, app.last_error
 
 
-def main():
+def _run_smoke():
     paths = [
         ROOT / "examples/input/customers_dirty.csv",
         ROOT / "examples/input/customers_dirty.xlsx",
@@ -123,6 +125,35 @@ def main():
     output.mkdir(exist_ok=True)
     (output / "gui-smoke.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
+
+
+def main():
+    """Run native checks with disposable state instead of actual user settings."""
+    keys = ("DATAFLOW_WORKSPACE_DIR", "LOCALAPPDATA")
+    original = {key: os.environ.get(key) for key in keys}
+    logger = logging.getLogger("dataflow")
+    previous_level, previous_propagate = logger.level, logger.propagate
+    with TemporaryDirectory(prefix="dataflow-gui-state-") as temporary:
+        directory = Path(temporary).resolve()
+        try:
+            os.environ["DATAFLOW_WORKSPACE_DIR"] = str(directory / "workspace")
+            os.environ["LOCALAPPDATA"] = str(directory / "appdata")
+            _run_smoke()
+        finally:
+            # Windows cannot remove the temporary log folder while its handler
+            # owns an open file. Close only handlers created inside this folder.
+            for handler in logger.handlers[:]:
+                filename = getattr(handler, "baseFilename", None)
+                if filename and Path(filename).resolve().is_relative_to(directory):
+                    logger.removeHandler(handler)
+                    handler.close()
+            logger.setLevel(previous_level)
+            logger.propagate = previous_propagate
+            for key, value in original.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
 
 if __name__ == "__main__":

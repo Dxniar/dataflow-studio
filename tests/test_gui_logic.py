@@ -117,3 +117,43 @@ def test_worker_reports_error_and_allows_next_operation():
     assert isinstance(outcome.error, ValueError)
     assert runner.submit("retry", lambda: "done")
     assert _wait_outcome(runner).value == "done"
+
+
+def test_worker_cooperatively_cancels_and_can_run_again():
+    from threading import Event
+
+    runner = TaskRunner()
+    assert hasattr(runner, "cancel")
+    entered, release = Event(), Event()
+
+    def work():
+        entered.set()
+        assert release.wait(2)
+        runner.control.checkpoint()
+        return "not reached"
+
+    assert runner.submit("cancel", work)
+    assert entered.wait(2)
+    assert runner.cancel()
+    release.set()
+    outcome = _wait_outcome(runner)
+    assert outcome.error.__class__.__name__ == "JobCancelled"
+    assert not runner.cancel()
+    assert runner.submit("next", lambda: 42)
+    assert _wait_outcome(runner).value == 42
+
+
+def test_worker_progress_is_delivered_without_tk_objects():
+    runner = TaskRunner()
+    assert hasattr(runner, "poll_progress")
+
+    def work():
+        runner.control.report("Cleaning", 1, 2)
+        runner.control.report("Cleaning", 2, 2)
+        return 9
+
+    runner.submit("progress", work)
+    assert _wait_outcome(runner).value == 9
+    events = runner.poll_progress()
+    assert [(event.completed, event.total) for event in events] == [(1, 2), (2, 2)]
+    assert runner.poll_progress() == []

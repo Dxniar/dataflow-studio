@@ -1,8 +1,34 @@
 # Validation record
 
+## 1.2.0 workflow reliability
+
+Dates: 26–27 October 2026. Implemented typed import, data validation, persistent local workspaces and cooperative cancellation/recovery. The prior 1.1 record below is retained as historical evidence.
+
+Meaningful new automated cases cover lexical IDs, locale numbers/dates, source changes during parsing, resource guards before header/sheet discovery, validation and rejected-row exports, malformed/corrupt/future-version workspace state, progress/cancellation, and resumable batches. Independent reviews found and corrected stale GUI validation results, lost inherited recovery checkpoints and invalid saved-run shapes.
+
+`scripts/gui_production_smoke.py` exercises actual Tk controls and shared workers in two isolated Python processes. Its first process imports explicit types, validates/exports actual XLSX, processes data, cancels after a durable first-file checkpoint, retries pending/failed sources, then exits abruptly during another batch. The second process restores preferences/history/rules, explicitly reloads files, recovers the interrupted batch and checks successful output/source SHA-256 hashes. The complete source workflow passed before final packaging; final check results are recorded below when executed.
+
+The Windows Computer Use screenshot bridge was unavailable during this revision. Functional native GUI checks are separate from visual screenshot inspection; no new screenshot-based visual approval is claimed. The existing screenshots/video describe the 1.1 design.
+
+### Executed 1.2 checks
+
+| Check | Observed result |
+| --- | --- |
+| Full pytest suite | 266 passed |
+| Ruff lint and formatting | Passed |
+| Legacy native GUI smoke | All 9 pages and 10 workflows passed; source hashes unchanged |
+| Two-process production GUI smoke | Passed with clean process exits; typed IDs/locale/dates, exact rejected XLSX, cancel/retry, repair/retry and hard-stop recovery checked |
+| PyInstaller Windows build | Completed successfully |
+| Packaged EXE startup | Process remained alive after startup and initialized an isolated SQLite workspace |
+| Independent whole-branch review | Both confirmed P2 findings fixed and scoped re-review cleared |
+
+The packaged EXE startup check is distinct from the complete source-application GUI scenario. No screenshot-based visual approval or complete packaged-EXE interaction test is claimed. Generated evidence is under `artifacts/`; it contains only synthetic QA fixtures. Remote CI status is available from [GitHub Actions](https://github.com/Dxniar/dataflow-studio/actions/workflows/ci.yml).
+
+## Historical 1.1.0 validation
+
 Date: 25 October 2026. Environment: Windows 11 x64, Python 3.12.0.
 
-Current release: **1.1.0**, with the redesigned desktop workspace. Local tests and the real desktop smoke were rerun for this revision. The desktop check also forces garbage collection in a worker after page changes and verifies that destroyed Tk variables were reclaimed on the main thread.
+Historical release: **1.1.0**, with the redesigned desktop workspace. Local tests and the real desktop smoke were rerun for that revision. The desktop check also forces garbage collection in a worker after page changes and verifies that destroyed Tk variables were reclaimed on the main thread.
 
 ## Executed local checks
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+- Added strict CSV/XLSX import schemas with stored text IDs, explicit dates and decimal/thousands separators.
+- Added bounded imports and source-change detection, including file/header/sheet-discovery guards.
+- Added read-only validation rules and rejected-record exports with source record numbers and reasons.
+- Persisted preferences, workflow/rules, recent paths, history and batch checkpoints locally in SQLite, without table snapshots.
+- Added cooperative cancellation, stage progress, failed/pending-only retry and recovery after process interruption.
+- Made interrupted recovery fail closed on existing destinations, retaining inherited checkpoints before workers start.
+- Added native two-process GUI verification, including a deliberate hard stop and output/source hash checks.
+- Added CLI import-config support and `validate` with rejected-row exports and exit code 4 for validation findings.
+
 ## 1.1.0
 
 - Redesigned the desktop as a compact data workspace with grouped navigation and consistent line icons.

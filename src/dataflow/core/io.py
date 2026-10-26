@@ -7,12 +7,14 @@ import os
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
+from zipfile import ZipFile
 
 import openpyxl
 import pandas as pd
 from openpyxl.cell import WriteOnlyCell
 
 from .errors import DataFlowError
+from .importing import ImportOptions, apply_import_schema
 from .validation import validate_columns
 
 logger = logging.getLogger(__name__)
@@ -42,7 +44,61 @@ def validate_csv_options(encoding: str, delimiter: str) -> None:
         raise DataFlowError("CSV delimiter must be one character, excluding quotes and newlines.")
 
 
-def _validate_csv_structure(path: Path, encoding: str, delimiter: str) -> None:
+def _checkpoint(control, stage=None, completed=0, total=0) -> None:
+    if control is not None:
+        if stage is not None:
+            control.report(stage, completed, total)
+        control.checkpoint()
+
+
+def _guard_shape(rows: int, columns: int, options: ImportOptions) -> None:
+    if rows > options.max_rows:
+        raise DataFlowError("Import row limit exceeded. Reduce the source or increase max_rows.")
+    if rows * columns > options.max_cells:
+        raise DataFlowError("Import cell limit exceeded. Reduce the source or increase max_cells.")
+
+
+def _guard_memory(frame: pd.DataFrame, options: ImportOptions) -> None:
+    if frame.memory_usage(index=True, deep=True).sum() > options.max_table_mb * 1024 * 1024:
+        raise DataFlowError(
+            "Import table memory limit exceeded. Reduce the source or increase max_table_mb."
+        )
+
+
+def _guard_source(source: Path, options: ImportOptions) -> None:
+    if source.stat().st_size > options.max_file_mb * 1024 * 1024:
+        raise DataFlowError(
+            "Import file size limit exceeded. Reduce the source or increase max_file_mb."
+        )
+    if source.suffix.lower() == ".xlsx":
+        # Inspect ZIP metadata before openpyxl reads shared strings and workbook XML.
+        with ZipFile(source) as archive:
+            if (
+                sum(item.file_size for item in archive.infolist())
+                > options.max_table_mb * 1024 * 1024 * 4
+            ):
+                raise DataFlowError(
+                    "Expanded workbook size limit exceeded. Reduce the workbook or increase max_table_mb."
+                )
+
+
+def _source_version(source: Path) -> tuple[int, int, int, int]:
+    stat = source.stat()
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
+
+
+def _ensure_unchanged(source: Path, version: tuple[int, int, int, int]) -> None:
+    try:
+        unchanged = _source_version(source) == version
+    except OSError:
+        unchanged = False
+    if not unchanged:
+        raise DataFlowError("The source file changed during import. Close its editor and retry.")
+
+
+def _validate_csv_structure(
+    path: Path, encoding: str, delimiter: str, options: ImportOptions, control=None
+) -> list[str]:
     with path.open(encoding=encoding, newline="") as stream:
         reader = csv.reader(stream, delimiter=delimiter, strict=True)
         try:
@@ -50,11 +106,21 @@ def _validate_csv_structure(path: Path, encoding: str, delimiter: str) -> None:
         except StopIteration:
             raise DataFlowError("CSV file is empty. A header row is required.") from None
         validate_columns(header)
-        for row in reader:
+        text_bytes = 0
+        for count, row in enumerate(reader, start=1):
+            if count % 1000 == 1:
+                _checkpoint(control, "read", count - 1, 0)
             if row and len(row) != len(header):
                 raise DataFlowError(
                     "CSV rows have inconsistent field counts. Check its delimiter and quoting."
                 )
+            _guard_shape(count, len(header), options)
+            text_bytes += sum(len(value.encode("utf-8")) for value in row)
+            if text_bytes > options.max_table_mb * 1024 * 1024:
+                raise DataFlowError(
+                    "Import table memory limit exceeded. Reduce the source or increase max_table_mb."
+                )
+        return header
 
 
 def _sheet_name(names: list[str], sheet: int | str) -> str:
@@ -67,16 +133,32 @@ def _sheet_name(names: list[str], sheet: int | str) -> str:
     )
 
 
-def list_sheets(path: str | Path) -> list[str]:
+def _validated_import_options(import_options: ImportOptions | dict | None) -> ImportOptions:
+    return ImportOptions.from_dict(
+        import_options.to_dict()
+        if isinstance(import_options, ImportOptions)
+        else {}
+        if import_options is None
+        else import_options
+    )
+
+
+def list_sheets(
+    path: str | Path, *, import_options: ImportOptions | dict | None = None
+) -> list[str]:
     source = _path(path, must_exist=True)
     if source.suffix.lower() != ".xlsx":
         raise DataFlowError("Sheet selection is only available for XLSX workbooks.")
+    options = _validated_import_options(import_options)
     try:
+        _guard_source(source, options)
         workbook = openpyxl.load_workbook(source, read_only=True, data_only=True)
         try:
             return list(workbook.sheetnames)
         finally:
             workbook.close()
+    except DataFlowError:
+        raise
     except Exception:
         # XLSX libraries can raise backend-specific XML errors containing raw data.
         raise DataFlowError(
@@ -84,14 +166,63 @@ def list_sheets(path: str | Path) -> list[str]:
         ) from None
 
 
-def read_table(
-    path: str | Path, *, sheet: int | str = 0, encoding: str = "utf-8-sig", delimiter: str = ","
-) -> pd.DataFrame:
+def read_columns(
+    path: str | Path,
+    *,
+    sheet: int | str = 0,
+    encoding: str = "utf-8-sig",
+    delimiter: str = ",",
+    import_options: ImportOptions | dict | None = None,
+) -> list[str]:
+    """Read only the source header, without parsing or inferring any table cells."""
     source = _path(path, must_exist=True)
+    options = _validated_import_options(import_options)
     try:
+        _guard_source(source, options)
         if source.suffix.lower() == ".csv":
             validate_csv_options(encoding, delimiter)
-            _validate_csv_structure(source, encoding, delimiter)
+            with source.open(encoding=encoding, newline="") as stream:
+                header = next(csv.reader(stream, delimiter=delimiter, strict=True), [])
+        else:
+            workbook = openpyxl.load_workbook(source, read_only=True, data_only=True)
+            try:
+                name = _sheet_name(workbook.sheetnames, sheet)
+                header = next(workbook[name].iter_rows(min_row=1, max_row=1, values_only=True), [])
+            finally:
+                workbook.close()
+        return validate_columns(header)
+    except DataFlowError:
+        raise
+    except Exception:
+        raise DataFlowError(
+            "Cannot read table header. Check the file, sheet, encoding, and delimiter."
+        ) from None
+
+
+def read_table(
+    path: str | Path,
+    *,
+    sheet: int | str = 0,
+    encoding: str = "utf-8-sig",
+    delimiter: str = ",",
+    import_options: ImportOptions | dict | None = None,
+    control=None,
+) -> pd.DataFrame:
+    source = _path(path, must_exist=True)
+    options = _validated_import_options(import_options)
+    try:
+        _checkpoint(control, "read", 0, 0)
+        version = _source_version(source)
+        _guard_source(source, options)
+        if source.suffix.lower() == ".csv":
+            validate_csv_options(encoding, delimiter)
+            header = _validate_csv_structure(source, encoding, delimiter, options, control)
+            if set(options.column_types) - set(header):
+                raise DataFlowError(
+                    "Import schema references a missing column. Check the source header."
+                )
+            _checkpoint(control, "parse", 0, 1)
+            _ensure_unchanged(source, version)
             frame = pd.read_csv(
                 source,
                 encoding=encoding,
@@ -100,6 +231,10 @@ def read_table(
                 na_values=[""],
                 skip_blank_lines=False,
                 on_bad_lines="error",
+                dtype={name: "string" for name in options.column_types},
+                decimal=options.decimal,
+                thousands=options.thousands,
+                nrows=options.max_rows + 1,
             )
         else:
             with pd.ExcelFile(source, engine="openpyxl") as excel:
@@ -110,8 +245,49 @@ def read_table(
                 if not header_rows:
                     raise DataFlowError("Excel sheet is empty. A header row is required.")
                 validate_columns(header_rows[0])
-                frame = pd.read_excel(excel, sheet_name=name, keep_default_na=False, na_values=[""])
+                if set(options.column_types) - set(header_rows[0]):
+                    raise DataFlowError(
+                        "Import schema references a missing column. Check the source header."
+                    )
+                worksheet = excel.book[name]
+                text_bytes = 0
+                for count, row in enumerate(
+                    worksheet.iter_rows(min_row=2, values_only=True), start=1
+                ):
+                    if count % 1000 == 1:
+                        _checkpoint(control, "read", count - 1, 0)
+                    _guard_shape(count, len(header_rows[0]), options)
+                    text_bytes += sum(
+                        len(value.encode("utf-8")) for value in row if isinstance(value, str)
+                    )
+                    if text_bytes > options.max_table_mb * 1024 * 1024:
+                        raise DataFlowError(
+                            "Import table memory limit exceeded. Reduce the source or increase max_table_mb."
+                        )
+                _checkpoint(control, "parse", 0, 1)
+                _ensure_unchanged(source, version)
+                frame = pd.read_excel(
+                    excel,
+                    sheet_name=name,
+                    keep_default_na=False,
+                    na_values=[""],
+                    dtype={
+                        column: "string" if kind == "string" else object
+                        for column, kind in options.column_types.items()
+                    },
+                    decimal=options.decimal,
+                    thousands=options.thousands,
+                    nrows=options.max_rows + 1,
+                )
+        _ensure_unchanged(source, version)
         validate_columns(frame.columns)
+        _guard_shape(len(frame), len(frame.columns), options)
+        _guard_memory(frame, options)
+        _checkpoint(control)
+        frame = apply_import_schema(frame, options, control=control)
+        _guard_memory(frame, options)
+        _checkpoint(control, "read", len(frame), len(frame))
+        _ensure_unchanged(source, version)
     except DataFlowError:
         raise
     except Exception:
@@ -133,7 +309,7 @@ def _csv_text(value):
     return value
 
 
-def _write_xlsx(frame: pd.DataFrame, temporary: Path) -> None:
+def _write_xlsx(frame: pd.DataFrame, temporary: Path, control=None) -> None:
     if len(frame) + 1 > 1_048_576 or len(frame.columns) > 16_384:
         raise DataFlowError("Table exceeds Excel's row or column limit. Export CSV instead.")
     workbook = openpyxl.Workbook(write_only=True)
@@ -160,8 +336,11 @@ def _write_xlsx(frame: pd.DataFrame, temporary: Path) -> None:
 
     try:
         worksheet.append(cells(frame.columns))
-        for values in frame.itertuples(index=False, name=None):
+        for number, values in enumerate(frame.itertuples(index=False, name=None)):
+            if number % 1000 == 0:
+                _checkpoint(control, "serialize", number, len(frame))
             worksheet.append(cells(values))
+        _checkpoint(control, "serialize", len(frame), len(frame))
         workbook.save(temporary)
     finally:
         if not worksheet.closed:
@@ -177,6 +356,7 @@ def write_table(
     delimiter: str = ",",
     collision: str = "error",
     source_paths: Iterable[str | Path] = (),
+    control=None,
 ) -> Path:
     """Write completely to a sibling temp file, then atomically publish without overwrite.
 
@@ -184,6 +364,7 @@ def write_table(
     Atomic publication uses a hard link on POSIX and non-replacing rename on Windows.
     """
     destination = _path(path)
+    _checkpoint(control)
     if collision not in {"error", "unique"}:
         raise DataFlowError("Collision policy must be 'error' or 'unique'.")
     validate_columns(frame.columns)
@@ -208,11 +389,14 @@ def write_table(
         os.close(handle)
         temporary = Path(filename)
         if destination.suffix.lower() == ".csv":
-            safe = frame.map(_csv_text)
-            safe.columns = [_csv_text(column) for column in frame.columns]
-            safe.to_csv(temporary, index=False, encoding=encoding, sep=delimiter)
+            with temporary.open("w", encoding=encoding, newline="") as stream:
+                for start in range(0, max(1, len(frame)), 1000):
+                    _checkpoint(control, "serialize", start, len(frame))
+                    safe = frame.iloc[start : start + 1000].map(_csv_text)
+                    safe.columns = [_csv_text(column) for column in frame.columns]
+                    safe.to_csv(stream, index=False, sep=delimiter, header=start == 0)
         else:
-            _write_xlsx(frame, temporary)
+            _write_xlsx(frame, temporary, control)
         # Windows FlushFileBuffers (used by fsync) requires a writable handle.
         with temporary.open("r+b") as stream:
             os.fsync(stream.fileno())
@@ -220,6 +404,7 @@ def write_table(
         number = 1
         while True:
             try:
+                _checkpoint(control, "publish", 0, 1)
                 if os.name == "nt":
                     # Windows rename fails if candidate exists; unlike POSIX rename, it cannot clobber.
                     os.rename(temporary, candidate)

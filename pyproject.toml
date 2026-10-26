@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dataflow-studio"
-version = "1.1.0"
+version = "1.2.0"
 description = "Desktop and CLI tools for safe, repeatable Excel and CSV workflows."
 readme = "README.md"
 requires-python = ">=3.11"

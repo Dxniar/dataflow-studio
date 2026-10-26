@@ -21,6 +21,7 @@ from dataflow.gui.components import (
     option,
 )
 from dataflow.gui.icons import icon
+from dataflow.gui.workspace import batch_checkpoint
 
 
 def _body(parent):
@@ -184,6 +185,10 @@ def dashboard(app, parent):
         image=icon("arrow_right", color=t.MUTED, size=15),
         compound="right",
     ).grid(row=2, column=0, sticky="ew", padx=14, pady=(5, 14))
+    if not app.files and app.saved_recent_files:
+        app.action(files, "Restore saved files", app.restore_workspace, width=180, height=34).grid(
+            row=3, column=0, sticky="ew", padx=14, pady=(0, 14)
+        )
     preview = DataPreview(workspace, "Data preview", height=420)
     preview.grid(row=0, column=1, sticky="nsew")
     preview.show(app.current_frame)
@@ -687,7 +692,7 @@ def history(app, parent):
     head = ctk.CTkFrame(body, fg_color="transparent")
     head.grid(row=0, column=0, sticky="ew", pady=(0, 14))
     label(head, f"{len(app.history)} events", size=13, bold=True).pack(side="left")
-    label(head, "Current session", size=12, color=t.MUTED).pack(side="right")
+    label(head, "Saved locally", size=12, color=t.MUTED).pack(side="right")
     listing = ctk.CTkScrollableFrame(
         body,
         fg_color=t.PANEL,
@@ -698,6 +703,65 @@ def history(app, parent):
         scrollbar_button_hover_color=t.MUTED,
     )
     listing.grid(row=1, column=0, sticky="nsew", pady=(0, 12))
+    jobs = [job for job in app.workspace.list_jobs() if job["kind"] == "batch"][:8]
+    for job in jobs:
+        panel = card(listing)
+        panel.pack(fill="x", padx=12, pady=8)
+        row = ctk.CTkFrame(panel, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=(12, 5))
+        label(row, f"Batch  ·  {job['status']}", size=13, bold=True).pack(side="left")
+        checkpoint = batch_checkpoint(job)
+        if checkpoint is None:
+            label(
+                panel,
+                "Saved checkpoint is invalid. Start a new batch; existing outputs are unchanged.",
+                size=11,
+                color=t.WARNING,
+                wraplength=780,
+                justify="left",
+            ).pack(anchor="w", padx=14, pady=(0, 10))
+            continue
+        remaining = len(checkpoint.get("errors", [])) + len(checkpoint.get("pending", []))
+        unsafe = job["id"] in app.workspace.unsafe_jobs
+        if unsafe or job["status"] in {"interrupted", "cancelled", "failed", "pending", "queued"}:
+            app.action(
+                row,
+                "Resume / retry",
+                lambda value=job["id"]: app.retry_batch(value),
+                width=120,
+                height=30,
+            ).pack(side="right")
+        label(
+            panel,
+            f"{len(checkpoint.get('successes', []))} completed · {remaining} failed / pending · {job['created_at'][:19]}",
+            size=11,
+            color=t.MUTED,
+            anchor="w",
+        ).pack(fill="x", padx=14, pady=(0, 7))
+        if unsafe or job["status"] == "interrupted":
+            label(
+                panel,
+                "Recovery stops if an output already exists; review it before starting a new batch.",
+                size=11,
+                color=t.WARNING,
+                wraplength=780,
+                justify="left",
+            ).pack(anchor="w", padx=14, pady=(0, 7))
+        if checkpoint.get("errors"):
+            errors = "\n".join(
+                f"{item['input']}: {item['error']}" for item in checkpoint["errors"][:3]
+            )
+            label(panel, errors, size=11, color=t.WARNING, wraplength=780, justify="left").pack(
+                anchor="w", padx=14, pady=(0, 8)
+            )
+    if jobs:
+        label(
+            listing,
+            "Retry uses saved options and current source files. Completed files are kept.",
+            size=11,
+            color=t.MUTED,
+            wraplength=780,
+        ).pack(anchor="w", padx=18, pady=(4, 14))
     if not app.history:
         label(listing, "No activity yet", size=16, bold=True).pack(
             anchor="w", padx=22, pady=(24, 7)
@@ -745,7 +809,7 @@ def _export_report(app):
         try:
             with Path(path).open("x", encoding="utf-8") as stream:
                 json.dump(
-                    {"successes": app.last_batch.successes, "errors": app.last_batch.errors},
+                    app.last_batch.to_dict(),
                     stream,
                     indent=2,
                     ensure_ascii=False,
@@ -765,7 +829,25 @@ def settings(app, parent):
         scrollbar_button_hover_color=t.MUTED,
     )
     body.grid(row=0, column=0, sticky="nsew")
-    _subtitle(body, "Preferences for this workspace session.")
+    _subtitle(body, "Preferences are saved on this computer between launches.")
+    saved = card(body)
+    saved.pack(fill="x", pady=(0, 16))
+    label(saved, "Local workspace", size=14, bold=True).pack(anchor="w", padx=20, pady=(16, 7))
+    label(saved, str(app.workspace.path), size=11, color=t.MUTED, wraplength=700).pack(
+        anchor="w", padx=20
+    )
+    label(
+        saved,
+        app.workspace.warning
+        or "Stores settings, workflow rules, recent paths and run metadata. Table contents are not stored.",
+        size=12,
+        color=t.WARNING if app.workspace.warning else t.MUTED,
+        wraplength=700,
+        justify="left",
+    ).pack(anchor="w", padx=20, pady=(6, 10))
+    app.action(saved, "Restore saved files", app.restore_workspace, width=185, height=34).pack(
+        anchor="w", padx=20, pady=(0, 16)
+    )
     panel = card(body)
     panel.pack(fill="x", pady=(0, 16))
     row = ctk.CTkFrame(panel, fg_color="transparent")
@@ -838,7 +920,7 @@ def settings(app, parent):
     ).pack(side="right")
     label(
         panel,
-        "Logs contain operation details, never table cells. Activity history lasts for this session.",
+        "Logs contain operation details, never table cells. Activity history is saved locally.",
         size=12,
         color=t.MUTED,
         wraplength=700,
@@ -857,6 +939,11 @@ def settings(app, parent):
 
 
 def build_page(app, parent, name):
+    if name == "Data Validation":
+        from dataflow.gui.quality_page import build_quality_page
+
+        build_quality_page(app, parent)
+        return
     {
         "Dashboard": dashboard,
         "Data Cleaning": cleaning,
